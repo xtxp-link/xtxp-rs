@@ -6,6 +6,7 @@
 mod canonical;
 mod doc;
 mod edit;
+mod ids;
 pub mod names;
 mod node;
 mod snapshot;
@@ -14,6 +15,7 @@ pub mod vector;
 pub use canonical::{canonical, hash_of};
 pub use doc::Xmesh;
 pub use edit::Op;
+pub use ids::{IdNode, IdNodeKind, NodeId};
 pub use node::{parse_document, parse_fragment, Element, Node};
 pub use snapshot::Snapshot;
 

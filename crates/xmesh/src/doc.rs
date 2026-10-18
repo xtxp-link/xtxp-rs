@@ -191,7 +191,7 @@ pub(crate) fn sort_attrs(attrs: &mut [(String, String)]) {
     });
 }
 
-fn out_to_string(value: Out) -> String {
+pub(crate) fn out_to_string(value: Out) -> String {
     match value {
         Out::Any(Any::String(s)) => s.to_string(),
         Out::Any(other) => other.to_string(),
