@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xmesh", "tools/fuzzer", "tools/yrs-compat"]
+members = ["crates/xmesh", "crates/xtxp-cli", "tools/fuzzer", "tools/chaos-proxy"]
 
 [workspace.package]
 edition = "2021"
@@ -8,10 +8,16 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/xtxp-link/xtxp-rs"
 
 [workspace.dependencies]
-yrs = "0.28.0"
-quick-xml = "0.36"
+# Same requirement as y-sweet v0.9.1 (its lockfile resolves to 0.19.2), so the spike speaks the same updates.
+yrs = { version = "0.19.1", features = ["sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 hex = "0.4"
+quick-xml = "0.36"
 rand = "0.8"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
