@@ -239,7 +239,7 @@ fn run(cli: Cli) -> Result<(), String> {
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
         }
-        Sub::Open { .. } => return Err("the TUI arrives with Task 7".into()),
+        Sub::Open { doc, read_only } => crate::adapters::tui::run(&server, &doc, read_only)?,
     }
     Ok(())
 }

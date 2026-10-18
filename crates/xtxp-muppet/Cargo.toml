@@ -8,7 +8,7 @@ description = "A local muppet: Xmesh plus xtxp-wire, with a TUI and one-shot com
 [features]
 default = ["adapters"]
 # The binary's adapters: terminal, network, clock, randomness. The core builds without them.
-adapters = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json"]
+adapters = ["dep:ratatui", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json"]
 
 [[bin]]
 name = "xtxp-muppet"
@@ -24,6 +24,7 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 clap = { version = "4", features = ["derive"], optional = true }
 rand = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+ratatui = { version = "0.30", optional = true }
 
 [dev-dependencies]
 xtxp-wire = { path = "../xtxp-wire", features = ["fake-host"] }
