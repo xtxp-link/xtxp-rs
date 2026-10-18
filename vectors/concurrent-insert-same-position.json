@@ -1,0 +1,36 @@
+{
+  "name": "concurrent-insert-same-position",
+  "description": "Two peers insert after the same element at once; both appear, lower client ID first.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 1,
+            "xml": "<circle/>"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 1,
+            "xml": "<ellipse/>"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/><circle/><ellipse/></svg>"
+  }
+}

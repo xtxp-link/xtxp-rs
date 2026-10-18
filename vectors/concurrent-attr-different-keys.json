@@ -1,0 +1,40 @@
+{
+  "name": "concurrent-attr-different-keys",
+  "description": "Two peers set different attributes of one element at once; both survive.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\"/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              0
+            ],
+            "name": "fill",
+            "value": "red"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              0
+            ],
+            "name": "stroke",
+            "value": "blue"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle fill=\"red\" r=\"1\" stroke=\"blue\"/></svg>"
+  }
+}

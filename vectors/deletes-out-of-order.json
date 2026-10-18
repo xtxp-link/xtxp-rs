@@ -1,0 +1,50 @@
+{
+  "name": "deletes-out-of-order",
+  "description": "A delete delivered before the insert it deletes (the Yrs 0.27.2 fix); the runner's shuffled orders deliver it early.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 0,
+            "xml": "<rect/><circle/>"
+          }
+        ]
+      ]
+    },
+    {
+      "b": [
+        [
+          {
+            "op": "remove",
+            "path": [
+              0
+            ]
+          }
+        ]
+      ],
+      "a": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              1
+            ],
+            "name": "fill",
+            "value": "red"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle fill=\"red\"/></svg>"
+  }
+}

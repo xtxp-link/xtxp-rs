@@ -1,0 +1,43 @@
+{
+  "name": "tspan-whitespace",
+  "description": "Whitespace-only text between tspans is kept (S4).",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><text xml:space=\"preserve\"><tspan>a</tspan> <tspan>b</tspan></text></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "insert_text",
+            "path": [
+              0,
+              0,
+              0
+            ],
+            "offset": 1,
+            "text": "x"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              0,
+              2
+            ],
+            "name": "x",
+            "value": "1"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><text xml:space=\"preserve\"><tspan>ax</tspan> <tspan x=\"1\">b</tspan></text></svg>"
+  }
+}

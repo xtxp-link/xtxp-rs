@@ -1,0 +1,38 @@
+{
+  "name": "namespaced-attrs",
+  "description": "Inkscape, Sodipodi and XLink attributes keep their fixed prefixes and sort by namespace URI.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:sodipodi=\"http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><sodipodi:namedview id=\"nv\"/><g inkscape:label=\"L\"><use xlink:href=\"#r\"/></g></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              1
+            ],
+            "name": "inkscape:groupmode",
+            "value": "layer"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "set_attr",
+            "path": [],
+            "name": "sodipodi:docname",
+            "value": "d.svg"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\" xmlns:sodipodi=\"http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" sodipodi:docname=\"d.svg\"><sodipodi:namedview id=\"nv\"/><g inkscape:groupmode=\"layer\" inkscape:label=\"L\"><use xlink:href=\"#r\"/></g></svg>"
+  }
+}

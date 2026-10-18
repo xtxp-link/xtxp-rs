@@ -1,0 +1,36 @@
+{
+  "name": "concurrent-insert-index-0",
+  "description": "Two peers insert a first child at once (the Yrs 0.27.3 index-0 fix); both appear before the old first child.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 0,
+            "xml": "<circle/>"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 0,
+            "xml": "<ellipse/>"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle/><ellipse/><rect/></svg>"
+  }
+}
