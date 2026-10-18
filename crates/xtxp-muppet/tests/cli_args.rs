@@ -79,3 +79,31 @@ fn one_shot_without_server_fails_cleanly() {
     assert!(stderr.contains("could not reach y-sweet"), "{stderr}");
     assert!(!stderr.contains("panicked"), "{stderr}");
 }
+
+#[test]
+fn bad_doc_names_are_refused_at_once() {
+    for args in [
+        &["show", "my doc"][..],
+        &["open", "a/b"],
+        &["edit", "a?b", "remove", "0"],
+        &["replay", "v.json", "--peer", "p1", "--doc", "x y"],
+    ] {
+        let start = std::time::Instant::now();
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_xtxp-muppet"))
+            .arg("--server")
+            .arg("127.0.0.1:1")
+            .args(args)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "{args:?}"
+        );
+        assert_eq!(out.status.code(), Some(1), "{args:?}");
+        assert!(
+            stderr.contains("isn't a valid document name"),
+            "{args:?}: {stderr}"
+        );
+    }
+}

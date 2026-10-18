@@ -176,6 +176,17 @@ fn finish(server: &str, outcome: &Outcome) -> Result<(), String> {
     }
 }
 
+/// Refuses a name y-sweet wouldn't take, before trying to connect.
+fn check_doc(name: &str) -> Result<(), String> {
+    if ysweet::valid_doc_name(name) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{name:?} isn't a valid document name (letters, digits, - and _)"
+        ))
+    }
+}
+
 fn run(cli: Cli) -> Result<(), String> {
     let server = cli.server.clone();
     match cli.sub {
@@ -188,17 +199,14 @@ fn run(cli: Cli) -> Result<(), String> {
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_default()
             });
-            if !ysweet::valid_doc_name(&name) {
-                return Err(format!(
-                    "{name:?} isn't a valid document name (letters, digits, - and _)"
-                ));
-            }
+            check_doc(&name)?;
             ysweet::create_doc(&server, &name)?;
             let outcome = ws::run(Mode::Init { seed }, &server, &name, Quiet, None);
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
         }
         Sub::Edit { doc, ops } => {
+            check_doc(&doc)?;
             let ops = parse_edit_ops(&ops)?;
             let outcome = ws::run(Mode::Edit(ops), &server, &doc, Quiet, None);
             finish(&server, &outcome)?;
@@ -210,6 +218,7 @@ fn run(cli: Cli) -> Result<(), String> {
             tree,
             hashes,
         } => {
+            check_doc(&doc)?;
             let outcome = ws::run(Mode::Show, &server, &doc, Quiet, None);
             finish(&server, &outcome)?;
             if hashes {
@@ -233,6 +242,9 @@ fn run(cli: Cli) -> Result<(), String> {
             seed,
             doc,
         } => {
+            if let Some(name) = &doc {
+                check_doc(name)?;
+            }
             let json = std::fs::read_to_string(&vector)
                 .map_err(|e| format!("{}: {e}", vector.display()))?;
             let v = Vector::from_json(&json).map_err(|e| e.to_string())?;
@@ -247,6 +259,7 @@ fn run(cli: Cli) -> Result<(), String> {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
             let gaps_ms = updates.iter().map(|_| rng.gen_range(0..=50)).collect();
             let name = doc.unwrap_or(v.name.clone());
+            check_doc(&name)?;
             let outcome = ws::run(
                 Mode::Replay { updates, gaps_ms },
                 &server,
@@ -257,7 +270,10 @@ fn run(cli: Cli) -> Result<(), String> {
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
         }
-        Sub::Open { doc, read_only } => crate::adapters::tui::run(&server, &doc, read_only)?,
+        Sub::Open { doc, read_only } => {
+            check_doc(&doc)?;
+            crate::adapters::tui::run(&server, &doc, read_only)?
+        }
     }
     Ok(())
 }
