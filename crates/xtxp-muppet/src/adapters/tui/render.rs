@@ -80,21 +80,37 @@ pub fn draw(frame: &mut Frame, model: &Model, screen: &Screen, now_ms: u64) {
         .and_then(|id| find(&screen.tree, id))
         .map(|n| &n.node)
     {
-        Some(IdNodeKind::Element { attrs, .. }) if attrs.is_empty() => {
-            vec![Line::from("(no attributes)")]
-        }
-        Some(IdNodeKind::Element { attrs, .. }) => attrs
-            .iter()
-            .enumerate()
-            .map(|(i, (k, v))| {
-                let line = Line::from(format!("{} = {}", display_name(k), v));
-                if matches!(model.mode, InputMode::AttrList { index } if index == i) {
-                    line.style(Style::default().add_modifier(Modifier::REVERSED))
-                } else {
-                    line
+        Some(IdNodeKind::Element { attrs, .. }) => {
+            let in_list = match model.mode {
+                InputMode::AttrList { index } => Some(index.min(attrs.len())),
+                _ => None,
+            };
+            let mut lines: Vec<Line> = attrs
+                .iter()
+                .enumerate()
+                .map(|(i, (k, v))| {
+                    let line = Line::from(format!("{} = {}", display_name(k), v));
+                    if in_list == Some(i) {
+                        line.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        line
+                    }
+                })
+                .collect();
+            match in_list {
+                Some(i) => {
+                    let add = Line::from("+ add attribute");
+                    lines.push(if i == attrs.len() {
+                        add.style(Style::default().add_modifier(Modifier::REVERSED))
+                    } else {
+                        add
+                    });
                 }
-            })
-            .collect(),
+                None if attrs.is_empty() => lines.push(Line::from("(no attributes)")),
+                None => {}
+            }
+            lines
+        }
         Some(IdNodeKind::Text(t)) => t.lines().map(|l| Line::from(l.to_string())).collect(),
         None => vec![],
     };
@@ -118,7 +134,7 @@ pub fn draw(frame: &mut Frame, model: &Model, screen: &Screen, now_ms: u64) {
         InputMode::AddAttrValue { name, buffer } => format!("{name} = {buffer}▏"),
         InputMode::InsertXml { buffer } => format!("insert first child (XML): {buffer}▏"),
         InputMode::MovePending(_) => "move: select the new parent and press m; Esc cancels".into(),
-        InputMode::AttrList { .. } => "Enter edit  a add  x remove  Esc back".into(),
+        InputMode::AttrList { .. } => "Enter edit  ⌫ remove  a add  Esc back".into(),
         InputMode::Browse if !model.status.is_empty() => model.status.clone(),
         InputMode::Browse => HINTS.into(),
     };
@@ -206,5 +222,47 @@ mod tests {
             .collect();
         assert!(text.contains("fill = red"), "{text}");
         assert!(text.contains("○ reconnecting"));
+    }
+    #[test]
+    fn attr_list_ends_with_the_add_row() {
+        let d = Xmesh::new(1).unwrap();
+        d.apply(
+            &Xmesh::seed(
+                r#"<svg xmlns="http://www.w3.org/2000/svg"><rect id="r1" fill="red"/></svg>"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let screen = Screen {
+            tree: d.tree_with_ids(),
+            snapshot_hash: d.snapshot_hash(),
+            doc_hash: d.hash(),
+            connected: true,
+            changed: vec![],
+        };
+        let mut model = super::super::model::Model::new("demo", false);
+        super::super::keys::after_show(&mut model, &Screen::default(), &screen, 0);
+        model.mode = InputMode::AttrList { index: 2 };
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|f| draw(f, &model, &screen, 0)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content().iter().map(|c| c.symbol()).collect();
+        assert!(text.contains("+ add attribute"), "{text}");
+        assert!(text.contains("⌫ remove"), "{text}");
+        let row = (0..24u16)
+            .find(|y| {
+                (0..80u16)
+                    .map(|x| buffer[(x, *y)].symbol().to_string())
+                    .collect::<String>()
+                    .contains("+ add attribute")
+            })
+            .unwrap();
+        let x = (0..80u16)
+            .find(|x| buffer[(*x, row)].symbol() == "+")
+            .unwrap();
+        assert!(
+            buffer[(x, row)].modifier.contains(Modifier::REVERSED),
+            "the add row is highlighted when selected"
+        );
     }
 }

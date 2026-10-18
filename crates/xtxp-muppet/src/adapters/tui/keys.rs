@@ -278,26 +278,29 @@ fn attr_list(model: &mut Model, screen: &Screen, key: KeyEvent, index: usize) ->
         return vec![];
     };
     let attrs = attrs_of(&node);
+    // Index `attrs.len()` is the "+ add attribute" row. Someone else may have
+    // removed attributes since the index was set, so clamp it.
+    let index = index.min(attrs.len());
+    let add_name = || InputMode::AddAttrName {
+        buffer: String::new(),
+    };
     match key.code {
         KeyCode::Up if index > 0 => model.mode = InputMode::AttrList { index: index - 1 },
-        KeyCode::Down if index + 1 < attrs.len() => {
+        KeyCode::Down if index < attrs.len() => {
             model.mode = InputMode::AttrList { index: index + 1 }
         }
         KeyCode::Esc => model.mode = InputMode::Browse,
-        KeyCode::Enter if editing_allowed(model) => {
-            if let Some((name, value)) = attrs.get(index) {
+        KeyCode::Enter if editing_allowed(model) => match attrs.get(index) {
+            Some((name, value)) => {
                 model.mode = InputMode::EditValue {
                     target: EditTarget::Attr(node.id, name.clone()),
                     buffer: value.clone(),
-                };
+                }
             }
-        }
-        KeyCode::Char('a') if editing_allowed(model) => {
-            model.mode = InputMode::AddAttrName {
-                buffer: String::new(),
-            }
-        }
-        KeyCode::Char('x') if editing_allowed(model) => {
+            None => model.mode = add_name(),
+        },
+        KeyCode::Char('a') if editing_allowed(model) => model.mode = add_name(),
+        KeyCode::Char('x') | KeyCode::Backspace | KeyCode::Delete if editing_allowed(model) => {
             if let Some((name, _)) = attrs.get(index) {
                 model.mode = InputMode::AttrList {
                     index: index.saturating_sub(1),
@@ -311,7 +314,7 @@ fn attr_list(model: &mut Model, screen: &Screen, key: KeyEvent, index: usize) ->
                 ];
             }
         }
-        _ => {}
+        _ => model.mode = InputMode::AttrList { index },
     }
     vec![]
 }
@@ -620,5 +623,109 @@ mod tests {
         after_show(&mut m, &s, &changed, 5_000);
         assert_eq!(m.highlight_until.get(&rect), Some(&6_000));
         let _: Vec<IdNode> = vec![];
+    }
+    #[test]
+    fn down_past_the_last_attribute_selects_the_add_row() {
+        let s = screen(SVG);
+        let (_, rect, _, _) = ids(&s);
+        let mut m = model_on(&s, rect);
+        // fill, id, then the add row at index 2; no further.
+        press(
+            &mut m,
+            &s,
+            &[KeyCode::Enter, KeyCode::Down, KeyCode::Down, KeyCode::Down],
+        );
+        assert_eq!(m.mode, InputMode::AttrList { index: 2 });
+        press(&mut m, &s, &[KeyCode::Up]);
+        assert_eq!(m.mode, InputMode::AttrList { index: 1 });
+    }
+
+    #[test]
+    fn enter_on_the_add_row_adds_an_attribute() {
+        let s = screen(SVG);
+        let (_, rect, _, _) = ids(&s);
+        let mut m = model_on(&s, rect);
+        press(
+            &mut m,
+            &s,
+            &[KeyCode::Enter, KeyCode::Down, KeyCode::Down, KeyCode::Enter],
+        );
+        assert_eq!(
+            m.mode,
+            InputMode::AddAttrName {
+                buffer: String::new()
+            }
+        );
+        let mut keys = typed("stroke");
+        keys.push(KeyCode::Enter);
+        keys.extend(typed("blue"));
+        keys.push(KeyCode::Enter);
+        let cmds = press(&mut m, &s, &keys);
+        assert_eq!(
+            cmds.last(),
+            Some(&Command::SetAttr {
+                node: rect,
+                name: "stroke".into(),
+                value: "blue".into()
+            })
+        );
+    }
+
+    #[test]
+    fn backspace_and_delete_remove_the_selected_attribute() {
+        let s = screen(SVG);
+        let (_, rect, _, _) = ids(&s);
+        for k in [KeyCode::Backspace, KeyCode::Delete] {
+            let mut m = model_on(&s, rect);
+            let cmds = press(&mut m, &s, &[KeyCode::Enter, KeyCode::Down, k]);
+            assert_eq!(
+                cmds.last(),
+                Some(&Command::RemoveAttr {
+                    node: rect,
+                    name: "id".into()
+                }),
+                "{k:?}"
+            );
+        }
+        let mut m = model_on(&s, rect);
+        let cmds = press(
+            &mut m,
+            &s,
+            &[
+                KeyCode::Enter,
+                KeyCode::Down,
+                KeyCode::Down,
+                KeyCode::Backspace,
+            ],
+        );
+        assert!(
+            cmds.is_empty(),
+            "nothing to remove on the add row: {cmds:?}"
+        );
+    }
+
+    #[test]
+    fn element_without_attributes_opens_on_the_add_row() {
+        let s = screen(SVG);
+        let (_, _, text, _) = ids(&s);
+        let mut m = model_on(&s, text);
+        press(&mut m, &s, &[KeyCode::Enter, KeyCode::Enter]);
+        assert_eq!(
+            m.mode,
+            InputMode::AddAttrName {
+                buffer: String::new()
+            }
+        );
+    }
+
+    #[test]
+    fn attr_index_is_clamped_after_a_remote_removal() {
+        let s = screen(SVG);
+        let (_, rect, _, _) = ids(&s);
+        let mut m = model_on(&s, rect);
+        // As if the list had more attributes before someone removed them.
+        m.mode = InputMode::AttrList { index: 7 };
+        press(&mut m, &s, &[KeyCode::Up]);
+        assert_eq!(m.mode, InputMode::AttrList { index: 1 });
     }
 }
