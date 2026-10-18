@@ -3,10 +3,12 @@
 //! No networking, file access, clocks or threads: everything that touches the
 //! world is an adapter outside this crate.
 
+mod canonical;
 mod doc;
 pub mod names;
 mod node;
 
+pub use canonical::{canonical, hash_of};
 pub use doc::Xmesh;
 pub use node::{parse_document, parse_fragment, Element, Node};
 
