@@ -1,0 +1,14 @@
+[package]
+name = "yrs-compat"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Probe: do Xmesh's Yrs 0.28 updates apply cleanly in Yrs 0.19.2, which y-sweet v0.9.1 runs?"
+
+[dependencies]
+xmesh = { path = "../../crates/xmesh" }
+yrs019 = { package = "yrs", version = "=0.19.2" }
+
+[dev-dependencies]
+rand.workspace = true

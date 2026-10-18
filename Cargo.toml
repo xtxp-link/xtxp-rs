@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xmesh"]
+members = ["crates/xmesh", "tools/yrs-compat"]
 
 [workspace.package]
 edition = "2021"
