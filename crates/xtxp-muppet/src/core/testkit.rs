@@ -127,6 +127,10 @@ impl World {
         &self.muppets[i]
     }
 
+    pub fn muppet_mut(&mut self, i: usize) -> &mut TestMuppet {
+        &mut self.muppets[i]
+    }
+
     pub fn view(&self, i: usize) -> std::cell::Ref<'_, Recorded> {
         self.views[i].0.borrow()
     }
