@@ -1,0 +1,16 @@
+[package]
+name = "chaos-proxy"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "A WebSocket proxy that delays and duplicates frames and drops connections (part 2, P3)."
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync", "io-util"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rand.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

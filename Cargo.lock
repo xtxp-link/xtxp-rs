@@ -252,6 +252,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chaos-proxy"
+version = "0.0.1"
+dependencies = [
+ "futures-util",
+ "rand 0.8.8",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "clap"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1882,7 +1892,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys",
