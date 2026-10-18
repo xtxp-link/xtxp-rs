@@ -1,0 +1,18 @@
+[package]
+name = "xmesh"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "XTXP's pure core: XML documents on Yrs's XML types, canonical form, snapshots."
+
+[dependencies]
+yrs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+quick-xml.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
