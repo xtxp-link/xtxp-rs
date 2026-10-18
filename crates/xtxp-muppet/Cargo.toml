@@ -15,6 +15,14 @@ name = "xtxp-muppet"
 path = "src/main.rs"
 required-features = ["adapters"]
 
+[[test]]
+name = "cli_args"
+required-features = ["adapters"]
+
+[[test]]
+name = "e2e"
+required-features = ["adapters"]
+
 [dependencies]
 xmesh = { path = "../xmesh" }
 xtxp-wire = { path = "../xtxp-wire" }
@@ -28,3 +36,6 @@ ratatui = { version = "0.30", optional = true }
 
 [dev-dependencies]
 xtxp-wire = { path = "../xtxp-wire", features = ["fake-host"] }
+xtxp-fuzzer = { path = "../../tools/fuzzer" }
+chaos-proxy = { path = "../../tools/chaos-proxy" }
+serde_json.workspace = true

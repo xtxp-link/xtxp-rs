@@ -121,6 +121,27 @@ pub fn tree_lines(tree: &[IdNode]) -> Vec<String> {
     out
 }
 
+/// A peer's updates in a single-round vector, made exactly as the vector
+/// defines them: its batches applied to its own replica of the seed, with its
+/// own client ID, seeing no other peer's edits.
+pub fn peer_updates(v: &Vector, peer: &str) -> Result<Vec<Vec<u8>>, String> {
+    let batches = v.rounds[0]
+        .get(peer)
+        .ok_or_else(|| format!("no peer {peer:?} in {}", v.name))?;
+    let client = *v
+        .peers
+        .get(peer)
+        .ok_or_else(|| format!("no client ID for {peer:?} in {}", v.name))?;
+    let replica = Xmesh::new(client).map_err(|e| e.to_string())?;
+    replica
+        .apply(&Xmesh::seed(&v.seed).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    batches
+        .iter()
+        .map(|b| replica.edit(b).map_err(|e| e.to_string()))
+        .collect()
+}
+
 /// One-shot view: nothing to show while running; statuses go to stderr.
 struct Quiet;
 
@@ -222,15 +243,12 @@ fn run(cli: Cli) -> Result<(), String> {
                     v.rounds.len()
                 ));
             }
-            let batches = v.rounds[0]
-                .get(&peer)
-                .cloned()
-                .ok_or_else(|| format!("no peer {peer:?} in {}", v.name))?;
+            let updates = peer_updates(&v, &peer)?;
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            let gaps_ms = batches.iter().map(|_| rng.gen_range(0..=50)).collect();
+            let gaps_ms = updates.iter().map(|_| rng.gen_range(0..=50)).collect();
             let name = doc.unwrap_or(v.name.clone());
             let outcome = ws::run(
-                Mode::Replay { batches, gaps_ms },
+                Mode::Replay { updates, gaps_ms },
                 &server,
                 &name,
                 Quiet,

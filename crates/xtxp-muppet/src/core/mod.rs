@@ -13,10 +13,12 @@ pub enum Mode {
     Edit(Vec<Op>),
     /// Sync, then finish.
     Show,
-    /// Apply `batches[k]` once `sum(gaps_ms[..=k])` has passed, connected or
-    /// not; finish when all are acknowledged and 500 ms pass without a remote update.
+    /// Push `updates[k]` once `sum(gaps_ms[..=k])` has passed, connected or
+    /// not; finish when all are acknowledged and 500 ms pass without a remote
+    /// update. The updates are made elsewhere, exactly as a vector defines a
+    /// peer's batches, so remote edits arriving meanwhile can't shift them.
     Replay {
-        batches: Vec<Vec<Op>>,
+        updates: Vec<Vec<u8>>,
         gaps_ms: Vec<u64>,
     },
     /// Push a seed update into an empty document; refuse one with content.
@@ -359,20 +361,22 @@ impl<T: Transport, C: Clock, I: IdSource, V: View> Muppet<T, C, I, V> {
                     self.finish(true, None);
                 }
             }
-            Mode::Replay { batches, gaps_ms } => {
-                while self.next_batch < batches.len()
+            Mode::Replay { updates, gaps_ms } => {
+                while self.next_batch < updates.len()
                     && now
                         >= self.started_ms + gaps_ms.iter().take(self.next_batch + 1).sum::<u64>()
                 {
-                    let batch = batches[self.next_batch].clone();
+                    let update = updates[self.next_batch].clone();
                     self.next_batch += 1;
                     self.last_activity_ms = now;
-                    self.apply_edit(batch);
+                    let out = self.peer.handle(Input::Apply(update));
+                    self.dispatch(out);
+                    self.refresh();
                     if self.finished {
                         return;
                     }
                 }
-                if self.next_batch == batches.len()
+                if self.next_batch == updates.len()
                     && synced
                     && !self.peer.unacked()
                     && now >= self.last_activity_ms + QUIET_MS
@@ -561,8 +565,15 @@ mod tests {
     fn replay_applies_on_schedule_and_finishes_quietly() {
         let mut w = World::new();
         seeded(&mut w);
+        // A replay pushes updates made elsewhere, exactly as a vector defines them.
+        let maker = xmesh::Xmesh::new(55).unwrap();
+        maker.apply(&xmesh::Xmesh::seed(SVG).unwrap()).unwrap();
+        let updates = vec![
+            maker.edit(&[fill(vec![0], "red")]).unwrap(),
+            maker.edit(&[fill(vec![1], "blue")]).unwrap(),
+        ];
         let r = w.add(Mode::Replay {
-            batches: vec![vec![fill(vec![0], "red")], vec![fill(vec![1], "blue")]],
+            updates,
             gaps_ms: vec![100, 200],
         });
         w.pump();

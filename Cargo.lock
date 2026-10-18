@@ -2213,6 +2213,7 @@ dependencies = [
 name = "xtxp-muppet"
 version = "0.0.1"
 dependencies = [
+ "chaos-proxy",
  "clap",
  "futures-util",
  "rand 0.8.8",
@@ -2221,6 +2222,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "xmesh",
+ "xtxp-fuzzer",
  "xtxp-wire",
 ]
 
