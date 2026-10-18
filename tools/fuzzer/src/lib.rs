@@ -5,7 +5,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use std::collections::BTreeMap;
-use xmesh::names::{CDATA, COMMENT, PI};
+use xmesh::names::is_reserved;
 use xmesh::vector::{Expect, Vector};
 use xmesh::{Node, Op, Xmesh};
 
@@ -89,10 +89,6 @@ struct Targets {
     nodes: Vec<Vec<u32>>,
 }
 
-fn reserved(name: &str) -> bool {
-    name == COMMENT || name == PI || name == CDATA
-}
-
 fn collect(node: &Node, path: Vec<u32>, t: &mut Targets) {
     if !path.is_empty() {
         t.nodes.push(path.clone());
@@ -100,7 +96,7 @@ fn collect(node: &Node, path: Vec<u32>, t: &mut Targets) {
     match node {
         Node::Text(text) => t.texts.push((path, text.clone())),
         Node::Element(e) => {
-            if !reserved(&e.name) {
+            if !is_reserved(&e.name) {
                 let names = e.attrs.iter().map(|(k, _)| k.clone()).collect();
                 t.elements.push((path.clone(), e.children.len(), names));
             }
@@ -131,7 +127,7 @@ fn pick<'a, T>(rng: &mut StdRng, items: &'a [T]) -> &'a T {
 fn random_op(rng: &mut StdRng, tree: &[Node]) -> Op {
     let root = tree
         .iter()
-        .find(|n| matches!(n, Node::Element(e) if !reserved(&e.name)))
+        .find(|n| matches!(n, Node::Element(e) if !is_reserved(&e.name)))
         .expect("document has a root");
     let mut t = Targets::default();
     collect(root, vec![], &mut t);

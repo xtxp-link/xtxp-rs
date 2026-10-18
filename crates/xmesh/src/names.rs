@@ -13,6 +13,20 @@ pub const COMMENT: &str = "{https://xtxp.link/ns}comment";
 pub const PI: &str = "{https://xtxp.link/ns}pi";
 /// Reserved element holding a CDATA section's text.
 pub const CDATA: &str = "{https://xtxp.link/ns}cdata";
+/// Reserved element for the XML declaration: `version` and `standalone` as
+/// attributes. The encoding isn't kept: Xmesh always holds UTF-8.
+pub const XML_DECL: &str = "{https://xtxp.link/ns}xml-decl";
+/// Reserved element holding the DOCTYPE's text verbatim, internal subset included.
+pub const DOCTYPE: &str = "{https://xtxp.link/ns}doctype";
+
+/// Names of every reserved element. Only their text (and the PI target and
+/// declaration attributes set when parsing) carries meaning.
+pub const RESERVED: [&str; 5] = [COMMENT, PI, CDATA, XML_DECL, DOCTYPE];
+
+/// True for comments, processing instructions, CDATA, the declaration and the DOCTYPE.
+pub fn is_reserved(name: &str) -> bool {
+    RESERVED.contains(&name)
+}
 
 /// Prefixes with a fixed meaning, used when parsing fragments and writing canonical XML.
 pub const FIXED_PREFIXES: [(&str, &str); 4] = [

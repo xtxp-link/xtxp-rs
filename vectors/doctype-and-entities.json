@@ -1,0 +1,41 @@
+{
+  "name": "doctype-and-entities",
+  "description": "An Illustrator-style file: the declaration and DOCTYPE are kept, entities declared in the DOCTYPE are expanded (also in namespace declarations), and canonical XML writes the DOCTYPE but not the declaration.",
+  "seed": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" [\n\t<!ENTITY ns_extend \"http://ns.adobe.com/Extensibility/1.0/\">\n\t<!ENTITY ns_svg \"http://www.w3.org/2000/svg\">\n]>\n<svg xmlns:x=\"&ns_extend;\" xmlns=\"&ns_svg;\"><x:pgf t=\"&ns_svg;\">a &ns_svg; b</x:pgf><!-- &ns_svg; --><![CDATA[&ns_svg;]]></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              0
+            ],
+            "name": "x",
+            "value": "1"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "insert_text",
+            "path": [
+              0,
+              0
+            ],
+            "offset": 30,
+            "text": "z"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" [\n\t<!ENTITY ns_extend \"http://ns.adobe.com/Extensibility/1.0/\">\n\t<!ENTITY ns_svg \"http://www.w3.org/2000/svg\">\n]><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:ns1=\"http://ns.adobe.com/Extensibility/1.0/\"><ns1:pgf t=\"http://www.w3.org/2000/svg\" x=\"1\">a http://www.w3.org/2000/svg bz</ns1:pgf><!-- &ns_svg; --><![CDATA[&ns_svg;]]></svg>"
+  }
+}

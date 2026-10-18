@@ -50,6 +50,12 @@ Feature: Convergence
     When Ann marks the layer and Ben sets the document name
     Then the attributes keep their prefixes and sort by namespace
 
+  @vector:doctype-and-entities
+  Scenario: A file with a declaration, a DOCTYPE and entities
+    Given an Illustrator file whose DOCTYPE declares entities used in its namespaces and text
+    When Ann sets an attribute and Ben edits the text at the same time
+    Then the DOCTYPE comes back as written, the entities are expanded, and the declaration is kept but not hashed
+
   @vector:no-namespace-element
   Scenario: An element in no namespace inside SVG
     Given metadata holding an element in no namespace
