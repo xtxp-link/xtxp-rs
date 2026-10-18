@@ -31,7 +31,7 @@ impl Xmesh {
         if client_id == Self::SEED_CLIENT {
             return Err(Error::ReservedClientId);
         }
-        if client_id >= 1 << 53 {
+        if client_id > u32::MAX as u64 {
             return Err(Error::ClientIdTooLarge(client_id));
         }
         Ok(Xmesh {
@@ -253,6 +253,15 @@ mod tests {
             Err(Error::ClientIdTooLarge(_))
         ));
         assert_eq!(Xmesh::new(9).unwrap().client_id(), 9);
+        // Yjs, and Yrs 0.19 (y-sweet's), read client IDs as 32 bits.
+        assert!(matches!(
+            Xmesh::new(1 << 32),
+            Err(Error::ClientIdTooLarge(_))
+        ));
+        assert_eq!(
+            Xmesh::new(u32::MAX as u64).unwrap().client_id(),
+            u32::MAX as u64
+        );
     }
 
     #[test]

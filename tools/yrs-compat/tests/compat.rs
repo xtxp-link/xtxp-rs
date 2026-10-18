@@ -15,7 +15,7 @@ fn doc_019() -> Doc {
     Doc::with_options(Options {
         skip_gc: true,
         offset_kind: OffsetKind::Utf16,
-        ..Options::with_client_id(1 << 41)
+        ..Options::with_client_id(0xF000_0001)
     })
 }
 
@@ -41,7 +41,7 @@ fn every_vector_matches_on_019() {
         let mut all = vec![r.seed.clone()];
         all.extend(r.updates.iter().cloned());
 
-        let new = Xmesh::new(1 << 40).unwrap();
+        let new = Xmesh::new(0xF000_0000).unwrap();
         let old = doc_019();
         for u in &all {
             new.apply(u).unwrap();
@@ -83,7 +83,7 @@ fn shuffled_orders_match_on_019() {
         let r = replay(&v).unwrap();
         let mut all = vec![r.seed.clone()];
         all.extend(r.updates.iter().cloned());
-        let reference = Xmesh::new(1 << 40).unwrap();
+        let reference = Xmesh::new(0xF000_0000).unwrap();
         for u in &all {
             reference.apply(u).unwrap();
         }
@@ -149,5 +149,43 @@ fn finding_019_loses_a_delete_that_arrives_first() {
     assert!(
         !canonical(&tree_019(&in_order)).contains("circle"),
         "in order, 0.19.2 is fine"
+    );
+}
+
+/// Finding: Yrs 0.19.2's v1 decoder reads client IDs as `u32`, so a client
+/// ID of 2^32 or more (allowed by Yrs 0.28) comes out as a different client
+/// in y-sweet. Xmesh therefore only accepts 32-bit client IDs, as Yjs uses.
+#[test]
+fn finding_019_reads_client_ids_as_32_bits() {
+    use yrs019::ReadTxn;
+    let big = (1u64 << 40) + 5;
+    let new = yrs::Doc::with_options(yrs::Options::with_client_id(yrs::block::ClientID::new(big)));
+    let text = new.get_or_insert_text("t");
+    {
+        use yrs::{Text, Transact};
+        text.insert(&mut new.transact_mut(), 0, "x");
+    }
+    let update = {
+        use yrs::{ReadTxn, Transact};
+        new.transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default())
+    };
+    let old = doc_019();
+    old.transact_mut()
+        .apply_update(Update::decode_v1(&update).unwrap());
+    let clients: Vec<u64> = old
+        .transact()
+        .state_vector()
+        .iter()
+        .map(|(c, _)| *c)
+        .collect();
+    assert_eq!(clients.len(), 1);
+    assert_ne!(
+        clients[0], big,
+        "0.19.2 no longer truncates: the finding is gone, update the spec"
+    );
+    assert!(
+        xmesh::Xmesh::new(big).is_err(),
+        "Xmesh refuses IDs that y-sweet would mangle"
     );
 }

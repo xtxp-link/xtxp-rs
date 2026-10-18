@@ -17,7 +17,7 @@ pub trait Clock {
 }
 
 pub trait IdSource {
-    /// A fresh client ID in `1..2^53`.
+    /// A fresh client ID in `1..=2^32-1` (Yjs and y-sweet read client IDs as 32 bits).
     fn next_client_id(&mut self) -> u64;
 }
 

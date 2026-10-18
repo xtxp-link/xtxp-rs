@@ -29,7 +29,7 @@ pub enum Error {
     Xml(String),
     /// Client ID 0 is reserved for seed updates.
     ReservedClientId,
-    /// Yrs client IDs are at most 53 bits.
+    /// Client IDs are at most 32 bits: Yjs, and Yrs 0.19 (y-sweet's), read them as 32 bits.
     ClientIdTooLarge(u64),
     /// A path that doesn't resolve to a node.
     BadPath(Vec<u32>),
@@ -52,7 +52,7 @@ impl fmt::Display for Error {
         match self {
             Error::Xml(msg) => write!(f, "XML error: {msg}"),
             Error::ReservedClientId => write!(f, "client ID 0 is reserved for seeds"),
-            Error::ClientIdTooLarge(id) => write!(f, "client ID {id} is more than 53 bits"),
+            Error::ClientIdTooLarge(id) => write!(f, "client ID {id} is more than 32 bits"),
             Error::BadPath(p) => write!(f, "no node at path {p:?}"),
             Error::NotAnElement(p) => write!(f, "node at path {p:?} is not an element"),
             Error::NotText(p) => write!(f, "node at path {p:?} is not text"),

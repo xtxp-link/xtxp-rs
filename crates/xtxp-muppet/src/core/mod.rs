@@ -127,7 +127,7 @@ pub struct Muppet<T: Transport, C: Clock, I: IdSource, V: View> {
 impl<T: Transport, C: Clock, I: IdSource, V: View> Muppet<T, C, I, V> {
     /// A muppet in `mode`; asks the transport for a connection straight away.
     pub fn new(mode: Mode, mut transport: T, clock: C, mut ids: I, view: V) -> Self {
-        let peer = Peer::new(ids.next_client_id()).expect("IdSource gives IDs in 1..2^53");
+        let peer = Peer::new(ids.next_client_id()).expect("IdSource gives 32-bit IDs, never 0");
         transport.connect();
         let now = clock.now_ms();
         Muppet {

@@ -14,7 +14,7 @@ use yrs::StateVector;
 pub type ConnId = u32;
 
 /// Client ID the fake host's own document uses; it never edits.
-const HOST_CLIENT: u64 = (1 << 52) + 7;
+const HOST_CLIENT: u64 = u32::MAX as u64 - 7;
 
 pub struct FakeHost {
     doc: Xmesh,
