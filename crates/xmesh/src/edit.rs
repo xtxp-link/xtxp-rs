@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use yrs::types::xml::XmlOut;
 use yrs::updates::decoder::Decode;
 use yrs::{
-    Doc, ReadTxn, StateVector, Text, Transact, TransactionMut, Update, Xml, XmlFragment,
+    Doc, GetString, ReadTxn, StateVector, Text, Transact, TransactionMut, Update, Xml, XmlFragment,
     XmlFragmentRef,
 };
 
@@ -212,6 +212,20 @@ fn expanded_name(name: &str) -> Result<String, Error> {
     }
 }
 
+/// The first UTF-16 offset at or after `offset` that falls between characters
+/// of `text`, so an offset inside a surrogate pair (half an emoji) moves past it
+/// (S10). Yrs 0.28 shifts a delete that starts inside a pair, and can panic.
+fn round_up(text: &str, offset: u32) -> u32 {
+    let mut at = 0;
+    for c in text.chars() {
+        if at >= offset {
+            return at;
+        }
+        at += c.len_utf16() as u32;
+    }
+    at
+}
+
 fn apply_op(txn: &mut TransactionMut, fragment: &XmlFragmentRef, op: &Op) -> Result<(), Error> {
     match op {
         Op::Insert { parent, index, xml } => {
@@ -240,14 +254,22 @@ fn apply_op(txn: &mut TransactionMut, fragment: &XmlFragmentRef, op: &Op) -> Res
             if *offset > t.len(txn) {
                 return Err(Error::IndexOutOfRange(path.clone(), *offset));
             }
-            t.insert(txn, *offset, text);
+            let at = round_up(&t.get_string(txn), *offset);
+            t.insert(txn, at, text);
         }
         Op::DeleteText { path, offset, len } => {
             let t = text_at(txn, fragment, path)?;
             if offset + len > t.len(txn) {
                 return Err(Error::IndexOutOfRange(path.clone(), offset + len));
             }
-            t.remove_range(txn, *offset, *len);
+            let current = t.get_string(txn);
+            let (start, end) = (
+                round_up(&current, *offset),
+                round_up(&current, offset + len),
+            );
+            if end > start {
+                t.remove_range(txn, start, end - start);
+            }
         }
         Op::Move {
             path,
@@ -632,5 +654,88 @@ mod tests {
         }])
         .unwrap();
         assert!(d.canonical().contains("<!--cx-->"));
+    }
+
+    fn text_doc(text: &str) -> Xmesh {
+        let d = Xmesh::new(1).unwrap();
+        let xml = format!(r#"<svg xmlns="http://www.w3.org/2000/svg"><text>{text}</text></svg>"#);
+        d.apply(&Xmesh::seed(&xml).unwrap()).unwrap();
+        d
+    }
+
+    fn text_of(d: &Xmesh) -> String {
+        let c = d.canonical();
+        let start = c.find("<text>").unwrap() + 6;
+        c[start..c.find("</text>").unwrap()].to_string()
+    }
+
+    // "a😀b" in UTF-16 units: a is 0..1, the emoji 1..3 (two halves), b 3..4.
+
+    #[test]
+    fn insert_inside_a_character_rounds_up() {
+        let d = text_doc("a😀b");
+        d.edit(&[Op::InsertText {
+            path: vec![0, 0],
+            offset: 2,
+            text: "X".into(),
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "a😀Xb");
+    }
+
+    #[test]
+    fn delete_ending_inside_a_character_takes_all_of_it() {
+        let d = text_doc("a😀b");
+        d.edit(&[Op::DeleteText {
+            path: vec![0, 0],
+            offset: 1,
+            len: 1,
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "ab");
+    }
+
+    #[test]
+    fn delete_starting_inside_a_character_starts_after_it() {
+        let d = text_doc("a😀b");
+        d.edit(&[Op::DeleteText {
+            path: vec![0, 0],
+            offset: 2,
+            len: 2,
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "a😀");
+    }
+
+    #[test]
+    fn delete_inside_one_character_deletes_nothing() {
+        // Yrs 0.28 itself shifts this range right and deletes the "b".
+        let d = text_doc("a😀b");
+        d.edit(&[Op::DeleteText {
+            path: vec![0, 0],
+            offset: 2,
+            len: 1,
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "a😀b");
+    }
+
+    #[test]
+    fn offsets_on_boundaries_are_unchanged() {
+        let d = text_doc("a😀b");
+        d.edit(&[Op::DeleteText {
+            path: vec![0, 0],
+            offset: 1,
+            len: 2,
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "ab");
+        d.edit(&[Op::InsertText {
+            path: vec![0, 0],
+            offset: 1,
+            text: "😀".into(),
+        }])
+        .unwrap();
+        assert_eq!(text_of(&d), "a😀b");
     }
 }
