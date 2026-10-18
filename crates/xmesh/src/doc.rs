@@ -15,6 +15,11 @@ pub(crate) const FRAGMENT: &str = "xmesh";
 /// One replica of an XML document, held in Yrs's XML types.
 pub struct Xmesh {
     pub(crate) doc: Doc,
+    /// Updates that left the document with missing dependencies. Yrs 0.28 can
+    /// fail to integrate its own pending update once those dependencies arrive
+    /// (found by fuzz seed 0), so Xmesh keeps them and re-applies them, which
+    /// is idempotent, until nothing is missing.
+    retry: std::cell::RefCell<Vec<Vec<u8>>>,
 }
 
 impl Xmesh {
@@ -31,6 +36,7 @@ impl Xmesh {
         }
         Ok(Xmesh {
             doc: new_doc(client_id),
+            retry: Default::default(),
         })
     }
 
@@ -49,8 +55,40 @@ impl Xmesh {
         self.doc.client_id().get()
     }
 
-    /// Applies a Yrs v1 update. Applying the same update again changes nothing.
+    /// Applies a Yrs v1 update. Applying the same update again changes nothing,
+    /// and updates may arrive in any order.
     pub fn apply(&self, update: &[u8]) -> Result<(), Error> {
+        self.apply_raw(update)?;
+        if !self.has_missing_updates() {
+            self.retry.borrow_mut().clear();
+            return Ok(());
+        }
+        let mut retry = self.retry.borrow_mut();
+        retry.push(update.to_vec());
+        // Retry while it helps: stop once nothing is missing, or once a pass
+        // moves nothing because a dependency genuinely hasn't arrived.
+        loop {
+            let before = self.state_vector();
+            for u in retry.iter() {
+                self.apply_raw(u)?;
+            }
+            if !self.has_missing_updates() {
+                retry.clear();
+                break;
+            }
+            if self.state_vector() == before {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// True while some applied update waits for updates that haven't arrived.
+    pub fn has_missing_updates(&self) -> bool {
+        self.doc.transact().has_missing_updates()
+    }
+
+    fn apply_raw(&self, update: &[u8]) -> Result<(), Error> {
         let update = Update::decode_v1(update).map_err(|e| Error::Update(e.to_string()))?;
         self.doc
             .transact_mut()

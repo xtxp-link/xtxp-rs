@@ -564,6 +564,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "xtxp-fuzzer"
+version = "0.0.1"
+dependencies = [
+ "rand",
+ "xmesh",
+ "yrs 0.28.0",
+]
+
+[[package]]
 name = "yrs"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

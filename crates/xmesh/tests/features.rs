@@ -47,5 +47,8 @@ fn every_tag_has_a_vector() {
 #[test]
 fn every_vector_is_tagged() {
     let untagged: Vec<_> = vectors().difference(&tagged()).cloned().collect();
-    assert!(untagged.is_empty(), "vectors no scenario names: {untagged:?}");
+    assert!(
+        untagged.is_empty(),
+        "vectors no scenario names: {untagged:?}"
+    );
 }
