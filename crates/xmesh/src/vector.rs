@@ -116,7 +116,7 @@ pub fn replay(v: &Vector) -> Result<Replay, Error> {
 }
 
 /// Client ID for the fresh replicas `check` delivers to; above any peer's.
-const CHECKER_CLIENT: u64 = 1 << 40;
+const CHECKER_CLIENT: u64 = 0xF000_0000;
 
 /// Replays `v`, delivers its updates to fresh replicas in `orders` shuffled
 /// orders (some updates twice), and checks that every replica ends with the

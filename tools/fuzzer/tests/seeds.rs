@@ -38,3 +38,35 @@ fn seeds_converge() {
         }
     }
 }
+
+/// `generate` must not change: part 1's pinned seed-0 finding depends on it.
+#[test]
+fn seed_0_is_unchanged() {
+    assert_eq!(
+        xmesh::hash_of(&generate(0).to_json()),
+        "49fa252cfd0ea834d1ab8f11ee57c347dd455ba3ec8ced3dacd184a34e5d798c"
+    );
+}
+
+#[test]
+fn single_round_shape() {
+    for seed in 0..50 {
+        let v = xtxp_fuzzer::generate_single_round(seed);
+        assert_eq!(v.peers.len(), 3, "seed {seed}");
+        assert_eq!(v.rounds.len(), 1, "seed {seed}");
+        for (peer, batches) in &v.rounds[0] {
+            assert!((2..=6).contains(&batches.len()), "seed {seed} peer {peer}");
+        }
+        assert_eq!(v.rounds[0].len(), 3, "every peer edits");
+    }
+}
+
+#[test]
+fn single_round_seeds_converge() {
+    for seed in 0..100 {
+        let v = xtxp_fuzzer::generate_single_round(seed);
+        if let Err(e) = check(&v, 20, seed) {
+            panic!("seed {seed}: {e}\n{}", v.to_json());
+        }
+    }
+}

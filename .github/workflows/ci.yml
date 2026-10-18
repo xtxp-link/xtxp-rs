@@ -15,6 +15,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --exclude xtxp-fuzzer
+      # The e2e tests need y-sweet; they run in the e2e job.
+      - run: cargo test --workspace --exclude xtxp-fuzzer --exclude xtxp-muppet
+      - run: cargo test -p xtxp-muppet --lib --test cli_args
       # 500 fuzz seeds take about 3 minutes in debug.
       - run: cargo test --release -p xtxp-fuzzer
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # y-sweet v0.9.1, pinned by commit, built once and cached.
+      - uses: actions/cache@v4
+        with:
+          path: .tools
+          key: ysweet-4f1909b
+      - run: |
+          if [ ! -x .tools/bin/y-sweet ]; then
+            cargo install --git https://github.com/jamsocket/y-sweet \
+              --rev 4f1909b2c3390ced54d32b82a673f4f7ee8ac780 y-sweet --root .tools --locked
+          fi
+      - run: cargo test -p xtxp-muppet --test e2e --release

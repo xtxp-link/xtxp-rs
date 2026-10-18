@@ -1,0 +1,17 @@
+[package]
+name = "xtxp-wire"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "The peer side of XTXP's conversation with a host: the Yjs sync protocol, as a pure state machine."
+
+[features]
+# An in-process stand-in for y-sweet v0.9.1, for tests here and in xtxp-muppet.
+fake-host = []
+
+[dependencies]
+xmesh = { path = "../xmesh" }
+yrs.workspace = true
+
+[dev-dependencies]
+xtxp-wire = { path = ".", features = ["fake-host"] }

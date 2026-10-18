@@ -8,6 +8,7 @@ description = "Probe: do Xmesh's Yrs 0.28 updates apply cleanly in Yrs 0.19.2, w
 
 [dependencies]
 xmesh = { path = "../../crates/xmesh" }
+yrs.workspace = true
 yrs019 = { package = "yrs", version = "=0.19.2" }
 
 [dev-dependencies]

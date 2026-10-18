@@ -1,0 +1,41 @@
+[package]
+name = "xtxp-muppet"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "A local muppet: Xmesh plus xtxp-wire, with a TUI and one-shot commands."
+
+[features]
+default = ["adapters"]
+# The binary's adapters: terminal, network, clock, randomness. The core builds without them.
+adapters = ["dep:ratatui", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json"]
+
+[[bin]]
+name = "xtxp-muppet"
+path = "src/main.rs"
+required-features = ["adapters"]
+
+[[test]]
+name = "cli_args"
+required-features = ["adapters"]
+
+[[test]]
+name = "e2e"
+required-features = ["adapters"]
+
+[dependencies]
+xmesh = { path = "../xmesh" }
+xtxp-wire = { path = "../xtxp-wire" }
+tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync", "io-util"], optional = true }
+tokio-tungstenite = { version = "0.30", optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"], optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+rand = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+ratatui = { version = "0.30", optional = true }
+
+[dev-dependencies]
+xtxp-wire = { path = "../xtxp-wire", features = ["fake-host"] }
+xtxp-fuzzer = { path = "../../tools/fuzzer" }
+chaos-proxy = { path = "../../tools/chaos-proxy" }
+serde_json.workspace = true

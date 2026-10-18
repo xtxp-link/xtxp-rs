@@ -15,7 +15,7 @@ fn doc_019() -> Doc {
     Doc::with_options(Options {
         skip_gc: true,
         offset_kind: OffsetKind::Utf16,
-        ..Options::with_client_id(1 << 41)
+        ..Options::with_client_id(0xF000_0001)
     })
 }
 
@@ -41,7 +41,7 @@ fn every_vector_matches_on_019() {
         let mut all = vec![r.seed.clone()];
         all.extend(r.updates.iter().cloned());
 
-        let new = Xmesh::new(1 << 40).unwrap();
+        let new = Xmesh::new(0xF000_0000).unwrap();
         let old = doc_019();
         for u in &all {
             new.apply(u).unwrap();
@@ -83,7 +83,7 @@ fn shuffled_orders_match_on_019() {
         let r = replay(&v).unwrap();
         let mut all = vec![r.seed.clone()];
         all.extend(r.updates.iter().cloned());
-        let reference = Xmesh::new(1 << 40).unwrap();
+        let reference = Xmesh::new(0xF000_0000).unwrap();
         for u in &all {
             reference.apply(u).unwrap();
         }
@@ -149,5 +149,109 @@ fn finding_019_loses_a_delete_that_arrives_first() {
     assert!(
         !canonical(&tree_019(&in_order)).contains("circle"),
         "in order, 0.19.2 is fine"
+    );
+}
+
+/// Finding: Yrs 0.19.2's v1 decoder reads client IDs as `u32`, so a client
+/// ID of 2^32 or more (allowed by Yrs 0.28) comes out as a different client
+/// in y-sweet. Xmesh therefore only accepts 32-bit client IDs, as Yjs uses.
+#[test]
+fn finding_019_reads_client_ids_as_32_bits() {
+    use yrs019::ReadTxn;
+    let big = (1u64 << 40) + 5;
+    let new = yrs::Doc::with_options(yrs::Options::with_client_id(yrs::block::ClientID::new(big)));
+    let text = new.get_or_insert_text("t");
+    {
+        use yrs::{Text, Transact};
+        text.insert(&mut new.transact_mut(), 0, "x");
+    }
+    let update = {
+        use yrs::{ReadTxn, Transact};
+        new.transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default())
+    };
+    let old = doc_019();
+    old.transact_mut()
+        .apply_update(Update::decode_v1(&update).unwrap());
+    let clients: Vec<u64> = old
+        .transact()
+        .state_vector()
+        .iter()
+        .map(|(c, _)| *c)
+        .collect();
+    assert_eq!(clients.len(), 1);
+    assert_ne!(
+        clients[0], big,
+        "0.19.2 no longer truncates: the finding is gone, update the spec"
+    );
+    assert!(
+        xmesh::Xmesh::new(big).is_err(),
+        "Xmesh refuses IDs that y-sweet would mangle"
+    );
+}
+
+const REPEAT_BASE: &[u8] = include_bytes!("../../../crates/xmesh/tests/fixtures/repeat-base.bin");
+const REPEAT_STEP2: &[u8] = include_bytes!("../../../crates/xmesh/tests/fixtures/repeat-step2.bin");
+
+/// Finding: a step 2 from y-sweet v0.9.1, encoded by Yrs 0.19.2, can list a
+/// client's blocks twice. Captured in the e2e test
+/// `offline_edits_survive_reconnects`.
+#[test]
+fn finding_019_step2_repeats_blocks() {
+    let u = Update::decode_v1(REPEAT_STEP2).unwrap();
+    assert_eq!(
+        format!("{u:?}").matches("<2#0>").count(),
+        2,
+        "client 2's first block is no longer repeated: update the spec"
+    );
+}
+
+/// Applies the repeated-blocks step 2 raw, as Yrs 0.28 alone would, then reads.
+#[test]
+#[ignore = "helper for finding_028_frees_a_live_block_on_repeated_blocks: crashes the process"]
+fn repeated_blocks_raw() {
+    use yrs::updates::decoder::Decode;
+    use yrs::{Transact, Xml, XmlFragment};
+    let doc = yrs::Doc::new();
+    for u in [REPEAT_BASE, REPEAT_STEP2] {
+        doc.transact_mut()
+            .apply_update(yrs::Update::decode_v1(u).unwrap())
+            .unwrap();
+    }
+    fn walk<T: yrs::ReadTxn>(txn: &T, n: yrs::XmlOut) {
+        if let yrs::XmlOut::Element(e) = n {
+            for (_, v) in e.attributes(txn) {
+                let _ = format!("{v:?}");
+            }
+            for c in e.children(txn) {
+                walk(txn, c);
+            }
+        }
+    }
+    let f = doc.get_or_insert_xml_fragment("xmesh");
+    let txn = doc.transact();
+    for c in f.children(&txn) {
+        walk(&txn, c);
+    }
+}
+
+/// Finding: Yrs 0.28 integrating the repeated blocks over an integrated skip
+/// replaces a live block, freeing it while the document still points at it;
+/// the next read crashes. Xmesh merges each update on its own before applying
+/// it, which drops the repeats (crates/xmesh/tests/repeated_blocks.rs).
+#[test]
+fn finding_028_frees_a_live_block_on_repeated_blocks() {
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--ignored",
+            "--exact",
+            "repeated_blocks_raw",
+            "--test-threads=1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "Yrs 0.28 applies the repeat safely now: the finding is gone, update the spec"
     );
 }

@@ -13,7 +13,7 @@ const STUCK_ORDER: [usize; 8] = [6, 7, 0, 3, 14, 5, 1, 8];
 fn deliver(all: &[Vec<u8>], order: impl Iterator<Item = usize>) -> bool {
     let doc = yrs::Doc::with_options(yrs::Options {
         skip_gc: true,
-        ..yrs::Options::with_client_id(yrs::block::ClientID::new(1 << 40))
+        ..yrs::Options::with_client_id(yrs::block::ClientID::new(0xF000_0000))
     });
     for i in order {
         doc.transact_mut()
@@ -49,8 +49,8 @@ fn xmesh_heals_the_stuck_order() {
     let mut sorted = STUCK_ORDER;
     sorted.sort();
     let (a, b) = (
-        xmesh::Xmesh::new(1 << 40).unwrap(),
-        xmesh::Xmesh::new(1 << 41).unwrap(),
+        xmesh::Xmesh::new(0xF000_0000).unwrap(),
+        xmesh::Xmesh::new(0xF000_0001).unwrap(),
     );
     for i in STUCK_ORDER {
         a.apply(&all[i]).unwrap();
