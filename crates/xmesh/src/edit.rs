@@ -102,6 +102,14 @@ impl Parent {
         }
     }
 
+    /// A node that may take new children: not text, not a reserved element.
+    fn container(out: XmlOut, path: &[u32]) -> Result<Parent, Error> {
+        match &out {
+            XmlOut::Element(e) if is_reserved(e) => Err(Error::NotAnElement(path.to_vec())),
+            _ => Parent::from_out(out, path),
+        }
+    }
+
     fn len<T: ReadTxn>(&self, txn: &T) -> u32 {
         match self {
             Parent::Fragment(f) => f.len(txn),
@@ -131,11 +139,18 @@ impl Parent {
     }
 }
 
+/// Comments, processing instructions and CDATA are elements to Yrs, but only
+/// their text may be edited: canonical XML ignores their attributes and child
+/// elements, so edits there would change the document without changing its hash.
+fn is_reserved(e: &yrs::XmlElementRef) -> bool {
+    [COMMENT, PI, CDATA].contains(&e.tag().as_ref())
+}
+
 /// Index of the root element among the fragment's live children.
 fn root_index<T: ReadTxn>(txn: &T, fragment: &XmlFragmentRef) -> Result<u32, Error> {
     fragment
         .children(txn)
-        .position(|c| matches!(&c, XmlOut::Element(e) if ![COMMENT, PI, CDATA].contains(&e.tag().as_ref())))
+        .position(|c| matches!(&c, XmlOut::Element(e) if !is_reserved(e)))
         .map(|i| i as u32)
         .ok_or_else(|| Error::BadPath(vec![]))
 }
@@ -166,7 +181,7 @@ fn element_at<T: ReadTxn>(
     path: &[u32],
 ) -> Result<yrs::XmlElementRef, Error> {
     match resolve(txn, fragment, path)?.0 {
-        XmlOut::Element(e) => Ok(e),
+        XmlOut::Element(e) if !is_reserved(&e) => Ok(e),
         _ => Err(Error::NotAnElement(path.to_vec())),
     }
 }
@@ -201,7 +216,7 @@ fn apply_op(txn: &mut TransactionMut, fragment: &XmlFragmentRef, op: &Op) -> Res
     match op {
         Op::Insert { parent, index, xml } => {
             let nodes = parse_fragment(xml)?;
-            let p = Parent::from_out(resolve(txn, fragment, parent)?.0, parent)?;
+            let p = Parent::container(resolve(txn, fragment, parent)?.0, parent)?;
             if *index > p.len(txn) {
                 return Err(Error::IndexOutOfRange(parent.clone(), *index));
             }
@@ -248,7 +263,7 @@ fn apply_op(txn: &mut TransactionMut, fragment: &XmlFragmentRef, op: &Op) -> Res
             let (node, parent) = resolve(txn, fragment, path)?;
             let (old_parent, old_index) = parent.ok_or_else(|| Error::BadPath(path.clone()))?;
             let copy = read_node(txn, &node).ok_or_else(|| Error::BadPath(path.clone()))?;
-            let dest = Parent::from_out(resolve(txn, fragment, new_parent)?.0, new_parent)?;
+            let dest = Parent::container(resolve(txn, fragment, new_parent)?.0, new_parent)?;
             if *index > dest.len(txn) {
                 return Err(Error::IndexOutOfRange(new_parent.clone(), *index));
             }
@@ -559,5 +574,40 @@ mod tests {
                 value: "red".into()
             }
         );
+    }
+
+    #[test]
+    fn element_ops_on_reserved_elements_refused() {
+        let d = Xmesh::new(1).unwrap();
+        d.apply(
+            &Xmesh::seed(r#"<svg xmlns="http://www.w3.org/2000/svg"><!--c--><g/></svg>"#).unwrap(),
+        )
+        .unwrap();
+        let set = Op::SetAttr {
+            path: vec![0],
+            name: "a".into(),
+            value: "b".into(),
+        };
+        assert!(matches!(d.edit(&[set]), Err(Error::NotAnElement(_))));
+        let insert = Op::Insert {
+            parent: vec![0],
+            index: 0,
+            xml: "<rect/>".into(),
+        };
+        assert!(matches!(d.edit(&[insert]), Err(Error::NotAnElement(_))));
+        let into = Op::Move {
+            path: vec![1],
+            new_parent: vec![0],
+            index: 0,
+        };
+        assert!(matches!(d.edit(&[into]), Err(Error::NotAnElement(_))));
+        // Editing the comment's text is still allowed.
+        d.edit(&[Op::InsertText {
+            path: vec![0, 0],
+            offset: 1,
+            text: "x".into(),
+        }])
+        .unwrap();
+        assert!(d.canonical().contains("<!--cx-->"));
     }
 }
