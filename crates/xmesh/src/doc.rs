@@ -120,23 +120,28 @@ pub(crate) fn write_nodes<F: XmlFragment>(
 pub(crate) fn read_nodes<F: XmlFragment, T: ReadTxn>(txn: &T, parent: &F) -> Vec<Node> {
     parent
         .children(txn)
-        .filter_map(|child| match child {
-            XmlOut::Text(text) => Some(Node::Text(text.get_string(txn))),
-            XmlOut::Element(e) => {
-                let mut attrs: Vec<(String, String)> = e
-                    .attributes(txn)
-                    .map(|(k, v)| (k.to_string(), out_to_string(v)))
-                    .collect();
-                sort_attrs(&mut attrs);
-                Some(Node::Element(Element {
-                    name: e.tag().to_string(),
-                    attrs,
-                    children: read_nodes(txn, &e),
-                }))
-            }
-            XmlOut::Fragment(_) => None,
-        })
+        .filter_map(|child| read_node(txn, &child))
         .collect()
+}
+
+/// Reads one text node or element and its subtree; `None` for a nested fragment.
+pub(crate) fn read_node<T: ReadTxn>(txn: &T, node: &XmlOut) -> Option<Node> {
+    match node {
+        XmlOut::Text(text) => Some(Node::Text(text.get_string(txn))),
+        XmlOut::Element(e) => {
+            let mut attrs: Vec<(String, String)> = e
+                .attributes(txn)
+                .map(|(k, v)| (k.to_string(), out_to_string(v)))
+                .collect();
+            sort_attrs(&mut attrs);
+            Some(Node::Element(Element {
+                name: e.tag().to_string(),
+                attrs,
+                children: read_nodes(txn, e),
+            }))
+        }
+        XmlOut::Fragment(_) => None,
+    }
 }
 
 /// Sorts attributes in canonical order: namespace URI (none first), then local name.

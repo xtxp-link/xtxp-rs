@@ -9,3 +9,7 @@ description = "XTXP's pure core: XML documents on Yrs's XML types, canonical for
 yrs.workspace = true
 quick-xml.workspace = true
 sha2.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
