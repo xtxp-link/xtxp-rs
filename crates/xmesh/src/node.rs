@@ -1,10 +1,11 @@
 //! The plain tree that sits between XML text, Yrs and canonical XML.
 
-use crate::names::{expand, CDATA, COMMENT, PI};
+use crate::names::{expand, is_reserved, CDATA, COMMENT, DOCTYPE, PI, XML_DECL};
 use crate::Error;
 use quick_xml::events::Event;
 use quick_xml::name::ResolveResult;
 use quick_xml::reader::NsReader;
+use std::collections::BTreeMap;
 
 /// One XML node. Comments, processing instructions and CDATA are elements with
 /// reserved names (see [`crate::names`]).
@@ -26,7 +27,8 @@ pub struct Element {
 /// processing instructions around it. The XML declaration and DOCTYPE are
 /// dropped, as is whitespace outside the root element.
 pub fn parse_document(xml: &str) -> Result<Vec<Node>, Error> {
-    let nodes = parse_nodes(xml)?;
+    let expanded = expand_doctype_entities(xml)?;
+    let nodes = parse_nodes(&expanded, true)?;
     let mut out = Vec::new();
     let mut roots = 0;
     for node in nodes {
@@ -36,7 +38,7 @@ pub fn parse_document(xml: &str) -> Result<Vec<Node>, Error> {
                 return Err(Error::Xml(format!("text outside the root element: {t:?}")))
             }
             Node::Element(e) => {
-                if e.name != COMMENT && e.name != PI {
+                if !is_reserved(&e.name) {
                     roots += 1;
                 }
                 out.push(Node::Element(e));
@@ -64,7 +66,7 @@ pub fn parse_fragment(xml: &str) -> Result<Vec<Node>, Error> {
     wrapped.push('>');
     wrapped.push_str(xml);
     wrapped.push_str(&format!("</{WRAP}>"));
-    match parse_nodes(&wrapped)?.pop() {
+    match parse_nodes(&wrapped, false)?.pop() {
         Some(Node::Element(wrapper))
             if wrapper.name == expand(Some(crate::names::SVG_NS), WRAP) =>
         {
@@ -111,8 +113,94 @@ fn reserved(name: &str, attrs: Vec<(String, String)>, text: String) -> Node {
     })
 }
 
-/// Reads every top-level node, resolving namespaces.
-fn parse_nodes(xml: &str) -> Result<Vec<Node>, Error> {
+/// Entities declared in a DOCTYPE's internal subset (`<!ENTITY name "value">`),
+/// substituted into the rest of the document before parsing, so they also work
+/// in namespace declarations. References inside comments, CDATA and processing
+/// instructions are left alone, as XML requires. Parameter and external
+/// entities aren't supported: a reference to one stays unresolved and fails.
+fn expand_doctype_entities(xml: &str) -> Result<std::borrow::Cow<'_, str>, Error> {
+    let Some(start) = xml.find("<!DOCTYPE") else {
+        return Ok(xml.into());
+    };
+    let end = doctype_end(xml, start)?;
+    let entities = declared_entities(&xml[start..end]);
+    if entities.is_empty() {
+        return Ok(xml.into());
+    }
+    let mut out = String::with_capacity(xml.len());
+    out.push_str(&xml[..end]);
+    let rest = &xml[end..];
+    let mut i = 0;
+    while i < rest.len() {
+        let tail = &rest[i..];
+        let skip = [("<!--", "-->"), ("<![CDATA[", "]]>"), ("<?", "?>")]
+            .iter()
+            .find(|(open, _)| tail.starts_with(open))
+            .map(|(_, close)| tail.find(close).map_or(tail.len(), |j| j + close.len()));
+        if let Some(len) = skip {
+            out.push_str(&tail[..len]);
+            i += len;
+            continue;
+        }
+        if tail.starts_with('&') {
+            if let Some(semi) = tail.find(';') {
+                if let Some(value) = entities.get(&tail[1..semi]) {
+                    out.push_str(value);
+                    i += semi + 1;
+                    continue;
+                }
+            }
+        }
+        let c = tail.chars().next().expect("non-empty");
+        out.push(c);
+        i += c.len_utf8();
+    }
+    Ok(out.into())
+}
+
+/// Byte offset just past the DOCTYPE that starts at `start`, allowing for an
+/// internal subset in brackets and quoted strings.
+fn doctype_end(xml: &str, start: usize) -> Result<usize, Error> {
+    let mut depth = 0;
+    let mut quote = None;
+    for (i, c) in xml[start..].char_indices() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '[') => depth += 1,
+            (None, ']') => depth -= 1,
+            (None, '>') if depth == 0 => return Ok(start + i + 1),
+            _ => {}
+        }
+    }
+    Err(Error::Xml("unterminated DOCTYPE".into()))
+}
+
+fn declared_entities(doctype: &str) -> BTreeMap<String, String> {
+    let mut entities = BTreeMap::new();
+    for decl in doctype.split("<!ENTITY").skip(1) {
+        let decl = decl.trim_start();
+        if decl.starts_with('%') {
+            continue;
+        }
+        let Some((name, rest)) = decl.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(q) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+            continue;
+        };
+        if let Some(value) = rest[1..].split(q).next() {
+            entities.insert(name.to_string(), value.to_string());
+        }
+    }
+    entities
+}
+
+/// Reads every top-level node, resolving namespaces. The declaration and
+/// DOCTYPE are allowed only in a whole document.
+fn parse_nodes(xml: &str, document: bool) -> Result<Vec<Node>, Error> {
     let mut reader = NsReader::from_str(xml);
     // Stack of open elements; the bottom entry collects top-level nodes.
     let mut stack: Vec<Element> = vec![Element {
@@ -190,7 +278,35 @@ fn parse_nodes(xml: &str) -> Result<Vec<Node>, Error> {
                 let node = reserved(PI, vec![("target".to_string(), target)], data);
                 stack.last_mut().expect("stack bottom").children.push(node);
             }
-            Event::Decl(_) | Event::DocType(_) => {}
+            Event::Decl(_) | Event::DocType(_) if !document => {
+                return Err(Error::Xml(
+                    "a fragment can't hold a declaration or DOCTYPE".into(),
+                ));
+            }
+            Event::Decl(d) => {
+                let mut attrs =
+                    vec![("version".to_string(), utf8(&d.version().map_err(xml_err)?)?)];
+                if let Some(standalone) = d.standalone() {
+                    attrs.push((
+                        "standalone".to_string(),
+                        utf8(&standalone.map_err(xml_err)?)?,
+                    ));
+                }
+                let node = Node::Element(Element {
+                    name: XML_DECL.to_string(),
+                    attrs,
+                    children: vec![],
+                });
+                stack.last_mut().expect("stack bottom").children.push(node);
+            }
+            Event::DocType(t) => {
+                let text = utf8(&t.into_inner())?.trim().to_string();
+                stack
+                    .last_mut()
+                    .expect("stack bottom")
+                    .children
+                    .push(reserved(DOCTYPE, vec![], text));
+            }
             Event::Eof => break,
         }
     }
@@ -206,7 +322,7 @@ fn parse_nodes(xml: &str) -> Result<Vec<Node>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::names::{INKSCAPE_NS, SVG_NS, XTXP_NS};
+    use crate::names::{DOCTYPE, INKSCAPE_NS, SVG_NS, XML_DECL, XTXP_NS};
 
     fn el(node: &Node) -> &Element {
         match node {
@@ -272,17 +388,111 @@ mod tests {
     #[test]
     fn prolog_comment() {
         let nodes = parse_document("<?xml version=\"1.0\"?><!-- Created --><svg/>").unwrap();
-        assert_eq!(nodes.len(), 2);
-        let comment = el(&nodes[0]);
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(el(&nodes[0]).name, XML_DECL);
+        let comment = el(&nodes[1]);
         assert_eq!(comment.name, COMMENT);
         assert_eq!(comment.children, vec![Node::Text(" Created ".into())]);
-        assert_eq!(el(&nodes[1]).name, "svg");
+        assert_eq!(el(&nodes[2]).name, "svg");
     }
 
     #[test]
     fn whitespace_between_prolog_and_root_is_dropped() {
         let nodes = parse_document("<?xml version=\"1.0\"?>\n<!-- c -->\n<svg/>\n").unwrap();
-        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes.len(), 3);
+    }
+
+    #[test]
+    fn declaration_kept_without_encoding() {
+        let nodes =
+            parse_document("<?xml version=\"1.0\" encoding=\"ISO-8859-1\" standalone=\"no\"?><a/>")
+                .unwrap();
+        let decl = el(&nodes[0]);
+        assert_eq!(decl.name, XML_DECL);
+        assert_eq!(decl.name, format!("{{{XTXP_NS}}}xml-decl"));
+        assert_eq!(
+            decl.attrs,
+            vec![
+                ("version".to_string(), "1.0".to_string()),
+                ("standalone".to_string(), "no".to_string())
+            ]
+        );
+        assert!(decl.children.is_empty());
+    }
+
+    #[test]
+    fn doctype_kept_verbatim() {
+        let xml = r#"<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg/>"#;
+        let nodes = parse_document(xml).unwrap();
+        let doctype = el(&nodes[0]);
+        assert_eq!(doctype.name, DOCTYPE);
+        assert_eq!(doctype.name, format!("{{{XTXP_NS}}}doctype"));
+        assert_eq!(
+            doctype.children,
+            vec![Node::Text(
+                r#"svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd""#.into()
+            )]
+        );
+    }
+
+    const ILLUSTRATOR: &str = concat!(
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n",
+        "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" [\n",
+        "\t<!ENTITY ns_extend \"http://ns.adobe.com/Extensibility/1.0/\">\n",
+        "\t<!ENTITY ns_svg \"http://www.w3.org/2000/svg\">\n",
+        "]>\n",
+        "<svg xmlns:x=\"&ns_extend;\" xmlns=\"&ns_svg;\"><x:pgf t=\"&ns_svg;\">a &ns_svg; b</x:pgf>",
+        "<!-- &ns_svg; --><![CDATA[&ns_svg;]]></svg>"
+    );
+
+    #[test]
+    fn doctype_entities_expanded() {
+        let nodes = parse_document(ILLUSTRATOR).unwrap();
+        assert_eq!(el(&nodes[0]).name, XML_DECL);
+        let doctype = el(&nodes[1]);
+        assert_eq!(doctype.name, DOCTYPE);
+        match &doctype.children[0] {
+            Node::Text(t) => assert!(
+                t.contains("<!ENTITY ns_svg \"http://www.w3.org/2000/svg\">"),
+                "{t}"
+            ),
+            other => panic!("{other:?}"),
+        }
+        let svg = el(&nodes[2]);
+        assert_eq!(svg.name, format!("{{{SVG_NS}}}svg"));
+        let pgf = el(&svg.children[0]);
+        assert_eq!(pgf.name, "{http://ns.adobe.com/Extensibility/1.0/}pgf");
+        assert_eq!(pgf.attrs, vec![("t".to_string(), SVG_NS.to_string())]);
+        assert_eq!(pgf.children, vec![Node::Text(format!("a {SVG_NS} b"))]);
+        // Entity references aren't recognised inside comments or CDATA.
+        assert_eq!(
+            el(&svg.children[1]).children,
+            vec![Node::Text(" &ns_svg; ".into())]
+        );
+        assert_eq!(
+            el(&svg.children[2]).children,
+            vec![Node::Text("&ns_svg;".into())]
+        );
+    }
+
+    #[test]
+    fn unknown_entity_rejected() {
+        assert!(matches!(
+            parse_document("<a>&nope;</a>"),
+            Err(Error::Xml(_))
+        ));
+    }
+
+    #[test]
+    fn fragment_rejects_declaration_and_doctype() {
+        assert!(matches!(
+            parse_fragment("<!DOCTYPE x><a/>"),
+            Err(Error::Xml(_))
+        ));
+        assert!(matches!(
+            parse_fragment("<?xml version=\"1.0\"?><a/>"),
+            Err(Error::Xml(_))
+        ));
     }
 
     #[test]

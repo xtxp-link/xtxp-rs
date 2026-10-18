@@ -282,9 +282,10 @@ mod tests {
         let doc = Xmesh::new(3).unwrap();
         doc.apply(&Xmesh::seed(xml).unwrap()).unwrap();
         let tree = doc.tree();
-        assert_eq!(tree.len(), 2);
-        match (&tree[0], &tree[1]) {
-            (Node::Element(c), Node::Element(svg)) => {
+        assert_eq!(tree.len(), 3);
+        match (&tree[0], &tree[1], &tree[2]) {
+            (Node::Element(d), Node::Element(c), Node::Element(svg)) => {
+                assert_eq!(d.name, crate::names::XML_DECL);
                 assert_eq!(c.name, COMMENT);
                 assert_eq!(svg.name, format!("{{{SVG_NS}}}svg"));
                 assert!(svg

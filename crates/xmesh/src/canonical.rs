@@ -1,6 +1,8 @@
 //! Xmesh canonical form v0: the exact bytes every implementation hashes.
 
-use crate::names::{split, CDATA, COMMENT, FIXED_PREFIXES, PI, SVG_NS, XML_NS};
+use crate::names::{
+    is_reserved, split, CDATA, COMMENT, DOCTYPE, FIXED_PREFIXES, PI, SVG_NS, XML_DECL, XML_NS,
+};
 use crate::node::{Element, Node};
 use crate::Xmesh;
 use sha2::{Digest, Sha256};
@@ -40,10 +42,6 @@ pub fn canonical(nodes: &[Node]) -> String {
         root_done |= is_root;
     }
     out
-}
-
-fn is_reserved(name: &str) -> bool {
-    name == COMMENT || name == PI || name == CDATA
 }
 
 /// Prefixes for every namespace that needs one, by URI.
@@ -160,6 +158,14 @@ fn write_node(out: &mut String, node: &Node, prefixes: &Prefixes, default_ns: &s
                 out.push_str(&data);
             }
             out.push_str("?>");
+            return;
+        }
+        // The declaration isn't part of canonical form v0: the bytes are always UTF-8.
+        XML_DECL => return,
+        DOCTYPE => {
+            out.push_str("<!DOCTYPE ");
+            out.push_str(&text_of(e));
+            out.push('>');
             return;
         }
         CDATA => {
@@ -334,6 +340,16 @@ mod tests {
         assert_eq!(
             canon(xml),
             "<!-- made --><a><!--c--><?t d?><?bare?><![CDATA[x<y]]></a>"
+        );
+    }
+
+    #[test]
+    fn doctype_written_declaration_omitted() {
+        assert_eq!(
+            canon(
+                r#"<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "a" "b"><!--c--><svg/>"#
+            ),
+            r#"<!DOCTYPE svg PUBLIC "a" "b"><!--c--><svg/>"#
         );
     }
 

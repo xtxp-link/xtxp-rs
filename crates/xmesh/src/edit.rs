@@ -1,7 +1,7 @@
 //! Edit operations. One call to [`Xmesh::edit`] is one Yrs transaction.
 
 use crate::doc::{new_doc, read_node, write_nodes, FRAGMENT};
-use crate::names::{expand, CDATA, COMMENT, FIXED_PREFIXES, PI};
+use crate::names::{expand, FIXED_PREFIXES};
 use crate::node::{parse_fragment, Node};
 use crate::Error;
 use crate::Xmesh;
@@ -143,7 +143,7 @@ impl Parent {
 /// their text may be edited: canonical XML ignores their attributes and child
 /// elements, so edits there would change the document without changing its hash.
 fn is_reserved(e: &yrs::XmlElementRef) -> bool {
-    [COMMENT, PI, CDATA].contains(&e.tag().as_ref())
+    crate::names::is_reserved(e.tag())
 }
 
 /// Index of the root element among the fragment's live children.
@@ -559,6 +559,29 @@ mod tests {
             .unwrap();
         b.apply(&update).unwrap();
         assert_eq!(b.canonical(), a.canonical());
+    }
+
+    #[test]
+    fn paths_skip_declaration_and_doctype() {
+        let d = Xmesh::new(1).unwrap();
+        let xml = r#"<?xml version="1.0"?><!DOCTYPE svg><!--c--><svg xmlns="http://www.w3.org/2000/svg"><g/></svg>"#;
+        d.apply(&Xmesh::seed(xml).unwrap()).unwrap();
+        d.edit(&[Op::SetAttr {
+            path: vec![],
+            name: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
+        d.edit(&[Op::SetAttr {
+            path: vec![0],
+            name: "b".into(),
+            value: "2".into(),
+        }])
+        .unwrap();
+        assert_eq!(
+            d.canonical(),
+            r#"<!DOCTYPE svg><!--c--><svg xmlns="http://www.w3.org/2000/svg" a="1"><g b="2"/></svg>"#
+        );
     }
 
     #[test]
