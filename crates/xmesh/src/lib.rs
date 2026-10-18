@@ -3,9 +3,11 @@
 //! No networking, file access, clocks or threads: everything that touches the
 //! world is an adapter outside this crate.
 
+mod doc;
 pub mod names;
 mod node;
 
+pub use doc::Xmesh;
 pub use node::{parse_document, parse_fragment, Element, Node};
 
 use std::fmt;
@@ -18,6 +20,8 @@ pub enum Error {
     Xml(String),
     /// Client ID 0 is reserved for seed updates.
     ReservedClientId,
+    /// Yrs client IDs are at most 53 bits.
+    ClientIdTooLarge(u64),
     /// A path that doesn't resolve to a node.
     BadPath(Vec<u32>),
     /// An element operation on a node that isn't an element.
@@ -39,6 +43,7 @@ impl fmt::Display for Error {
         match self {
             Error::Xml(msg) => write!(f, "XML error: {msg}"),
             Error::ReservedClientId => write!(f, "client ID 0 is reserved for seeds"),
+            Error::ClientIdTooLarge(id) => write!(f, "client ID {id} is more than 53 bits"),
             Error::BadPath(p) => write!(f, "no node at path {p:?}"),
             Error::NotAnElement(p) => write!(f, "node at path {p:?} is not an element"),
             Error::NotText(p) => write!(f, "node at path {p:?} is not text"),
