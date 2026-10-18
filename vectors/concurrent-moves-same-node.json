@@ -1,0 +1,48 @@
+{
+  "name": "concurrent-moves-same-node",
+  "description": "Known gap (decision 20): two concurrent moves of one node leave a copy in each destination.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"g1\"/><g id=\"g2\"/><rect id=\"r\"/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "move",
+            "path": [
+              2
+            ],
+            "new_parent": [
+              0
+            ],
+            "index": 0
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "move",
+            "path": [
+              2
+            ],
+            "new_parent": [
+              1
+            ],
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"g1\"><rect id=\"r\"/></g><g id=\"g2\"><rect id=\"r\"/></g></svg>",
+    "known_gap": {
+      "reason": "concurrent moves duplicate the node",
+      "ideal_canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g id=\"g1\"><rect id=\"r\"/></g><g id=\"g2\"/></svg>"
+    }
+  }
+}

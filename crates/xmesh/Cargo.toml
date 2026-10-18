@@ -7,12 +7,8 @@ description = "XTXP's pure core: XML documents on Yrs's XML types, canonical for
 
 [dependencies]
 yrs.workspace = true
+quick-xml.workspace = true
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
-hex.workspace = true
-quick-xml.workspace = true
-anyhow.workspace = true
-
-[dev-dependencies]
 rand.workspace = true

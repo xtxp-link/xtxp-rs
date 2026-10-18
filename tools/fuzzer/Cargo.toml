@@ -1,0 +1,14 @@
+[package]
+name = "xtxp-fuzzer"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Generates XTXP test vectors from a numeric seed."
+
+[dependencies]
+xmesh = { path = "../../crates/xmesh" }
+rand.workspace = true
+
+[dev-dependencies]
+yrs.workspace = true

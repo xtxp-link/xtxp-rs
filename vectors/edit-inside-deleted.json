@@ -1,0 +1,39 @@
+{
+  "name": "edit-inside-deleted",
+  "description": "An edit inside an element deleted at the same time stays hidden.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g><rect/></g></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "remove",
+            "path": [
+              0
+            ]
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              0,
+              0
+            ],
+            "name": "fill",
+            "value": "red"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"
+  }
+}

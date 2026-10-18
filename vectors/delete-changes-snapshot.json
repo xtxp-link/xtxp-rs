@@ -1,0 +1,29 @@
+{
+  "name": "delete-changes-snapshot",
+  "description": "Deleting a shape changes the snapshot hash even though the state vector only grows by the delete.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/><circle/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "remove",
+            "path": [
+              1
+            ]
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>",
+    "snapshot": {
+      "changes_after_round": 1
+    }
+  }
+}

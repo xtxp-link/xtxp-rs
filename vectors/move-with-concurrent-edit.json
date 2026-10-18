@@ -1,0 +1,46 @@
+{
+  "name": "move-with-concurrent-edit",
+  "description": "Known gap (decision 20): a move is a delete plus a copy, so a concurrent edit to the original is lost.",
+  "seed": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g/><rect id=\"r\"/></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "move",
+            "path": [
+              1
+            ],
+            "new_parent": [
+              0
+            ],
+            "index": 0
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "set_attr",
+            "path": [
+              1
+            ],
+            "name": "fill",
+            "value": "red"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g><rect id=\"r\"/></g></svg>",
+    "known_gap": {
+      "reason": "move as delete plus copy loses concurrent edits to the original",
+      "ideal_canonical": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g><rect fill=\"red\" id=\"r\"/></g></svg>"
+    }
+  }
+}

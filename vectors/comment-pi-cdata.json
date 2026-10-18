@@ -1,0 +1,40 @@
+{
+  "name": "comment-pi-cdata",
+  "description": "Comments, processing instructions and CDATA, inside and before the root, round-trip through edits.",
+  "seed": "<!-- before --><svg xmlns=\"http://www.w3.org/2000/svg\"><!--c--><?p d?><style><![CDATA[a<b]]></style></svg>",
+  "peers": {
+    "a": 1,
+    "b": 2
+  },
+  "rounds": [
+    {
+      "a": [
+        [
+          {
+            "op": "insert",
+            "parent": [],
+            "index": 0,
+            "xml": "<!--new-->"
+          }
+        ]
+      ],
+      "b": [
+        [
+          {
+            "op": "insert_text",
+            "path": [
+              2,
+              0,
+              0
+            ],
+            "offset": 3,
+            "text": "c"
+          }
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "canonical": "<!-- before --><svg xmlns=\"http://www.w3.org/2000/svg\"><!--new--><!--c--><?p d?><style><![CDATA[a<bc]]></style></svg>"
+  }
+}
