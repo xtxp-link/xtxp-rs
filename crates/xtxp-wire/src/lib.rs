@@ -498,4 +498,24 @@ mod tests {
         assert!(net.peers[b].0.doc().canonical().contains("circle"));
         assert!(net.events[a].contains(&Event::LocalAcked));
     }
+
+    #[test]
+    fn pending_update_survives_reconnect() {
+        // An update applied before the doc it builds on has arrived waits in
+        // Yrs' pending queue; a reconnect's fresh doc must carry it too.
+        let mut net = Net::new();
+        let a = net.add(1);
+        let b = net.add(2);
+        net.connect(b);
+        net.seed(b);
+        let replica = Xmesh::new(5).unwrap();
+        replica.apply(&Xmesh::seed(SVG).unwrap()).unwrap();
+        let edit = replica.edit(&set_fill(vec![0], "red")).unwrap();
+        net.input(a, Input::Apply(edit));
+        net.input(a, Input::Reconnect(11));
+        net.connect(a);
+        net.settle();
+        assert!(net.peers[b].0.doc().canonical().contains(r#"fill="red""#));
+        assert_eq!(net.peers[a].0.doc().hash(), net.peers[b].0.doc().hash());
+    }
 }

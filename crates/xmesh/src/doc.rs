@@ -89,7 +89,11 @@ impl Xmesh {
     }
 
     fn apply_raw(&self, update: &[u8]) -> Result<(), Error> {
-        let update = Update::decode_v1(update).map_err(|e| Error::Update(e.to_string()))?;
+        // Yrs 0.19.2 (y-sweet v0.9.1) can send an update that lists a client's
+        // blocks twice, and Yrs 0.28 integrating the repeat over a skip frees
+        // a live block. Merging the update on its own drops the repeats.
+        let update = yrs::merge_updates_v1([update]).map_err(|e| Error::Update(e.to_string()))?;
+        let update = Update::decode_v1(&update).map_err(|e| Error::Update(e.to_string()))?;
         self.doc
             .transact_mut()
             .apply_update(update)
@@ -102,10 +106,19 @@ impl Xmesh {
         self.doc.transact().state_vector().encode_v1()
     }
 
-    /// Everything this replica has that a peer with `state_vector` lacks.
+    /// Everything this replica has that a peer with `state_vector` lacks,
+    /// including updates still waiting for their dependencies: Yrs leaves
+    /// those out of a diff, so a copy or a host would never get them.
     pub fn diff(&self, state_vector: &[u8]) -> Result<Vec<u8>, Error> {
         let sv = StateVector::decode_v1(state_vector).map_err(|e| Error::Update(e.to_string()))?;
-        Ok(self.doc.transact().encode_diff_v1(&sv))
+        let diff = self.doc.transact().encode_diff_v1(&sv);
+        let retry = self.retry.borrow();
+        if retry.is_empty() || !self.has_missing_updates() {
+            return Ok(diff);
+        }
+        let mut all = vec![diff];
+        all.extend(retry.iter().cloned());
+        yrs::merge_updates_v1(all).map_err(|e| Error::Update(e.to_string()))
     }
 
     /// The live document as a tree: the root element plus the comments and
@@ -305,6 +318,43 @@ mod tests {
             other => panic!("unexpected tree {other:?}"),
         }
         assert_eq!(tree, parsed(xml));
+    }
+}
+
+#[cfg(test)]
+mod pending {
+    use super::*;
+
+    const SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg"><rect id="a"/></svg>"#;
+
+    /// An update still waiting for its dependencies is part of what a replica
+    /// has, so a diff must carry it: a fresh copy, or a peer that already has
+    /// the dependencies, gets it too.
+    #[test]
+    fn diff_carries_pending_updates() {
+        let seed = Xmesh::seed(SVG).unwrap();
+        let replica = Xmesh::new(5).unwrap();
+        replica.apply(&seed).unwrap();
+        let edit = replica
+            .edit(&[crate::Op::SetAttr {
+                path: vec![],
+                name: "fill".into(),
+                value: "red".into(),
+            }])
+            .unwrap();
+        let early = Xmesh::new(6).unwrap();
+        early.apply(&edit).unwrap();
+        assert!(early.has_missing_updates());
+        let copy = Xmesh::new(7).unwrap();
+        copy.apply(&early.diff(&Xmesh::new(8).unwrap().state_vector()).unwrap())
+            .unwrap();
+        copy.apply(&seed).unwrap();
+        assert_eq!(copy.canonical(), replica.canonical());
+        let host = Xmesh::new(9).unwrap();
+        host.apply(&seed).unwrap();
+        host.apply(&early.diff(&host.state_vector()).unwrap())
+            .unwrap();
+        assert_eq!(host.canonical(), replica.canonical());
     }
 }
 

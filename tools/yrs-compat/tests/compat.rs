@@ -189,3 +189,69 @@ fn finding_019_reads_client_ids_as_32_bits() {
         "Xmesh refuses IDs that y-sweet would mangle"
     );
 }
+
+const REPEAT_BASE: &[u8] = include_bytes!("../../../crates/xmesh/tests/fixtures/repeat-base.bin");
+const REPEAT_STEP2: &[u8] = include_bytes!("../../../crates/xmesh/tests/fixtures/repeat-step2.bin");
+
+/// Finding: a step 2 from y-sweet v0.9.1, encoded by Yrs 0.19.2, can list a
+/// client's blocks twice. Captured in the e2e test
+/// `offline_edits_survive_reconnects`.
+#[test]
+fn finding_019_step2_repeats_blocks() {
+    let u = Update::decode_v1(REPEAT_STEP2).unwrap();
+    assert_eq!(
+        format!("{u:?}").matches("<2#0>").count(),
+        2,
+        "client 2's first block is no longer repeated: update the spec"
+    );
+}
+
+/// Applies the repeated-blocks step 2 raw, as Yrs 0.28 alone would, then reads.
+#[test]
+#[ignore = "helper for finding_028_frees_a_live_block_on_repeated_blocks: crashes the process"]
+fn repeated_blocks_raw() {
+    use yrs::updates::decoder::Decode;
+    use yrs::{Transact, Xml, XmlFragment};
+    let doc = yrs::Doc::new();
+    for u in [REPEAT_BASE, REPEAT_STEP2] {
+        doc.transact_mut()
+            .apply_update(yrs::Update::decode_v1(u).unwrap())
+            .unwrap();
+    }
+    fn walk<T: yrs::ReadTxn>(txn: &T, n: yrs::XmlOut) {
+        if let yrs::XmlOut::Element(e) = n {
+            for (_, v) in e.attributes(txn) {
+                let _ = format!("{v:?}");
+            }
+            for c in e.children(txn) {
+                walk(txn, c);
+            }
+        }
+    }
+    let f = doc.get_or_insert_xml_fragment("xmesh");
+    let txn = doc.transact();
+    for c in f.children(&txn) {
+        walk(&txn, c);
+    }
+}
+
+/// Finding: Yrs 0.28 integrating the repeated blocks over an integrated skip
+/// replaces a live block, freeing it while the document still points at it;
+/// the next read crashes. Xmesh merges each update on its own before applying
+/// it, which drops the repeats (crates/xmesh/tests/repeated_blocks.rs).
+#[test]
+fn finding_028_frees_a_live_block_on_repeated_blocks() {
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--ignored",
+            "--exact",
+            "repeated_blocks_raw",
+            "--test-threads=1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "Yrs 0.28 applies the repeat safely now: the finding is gone, update the spec"
+    );
+}
