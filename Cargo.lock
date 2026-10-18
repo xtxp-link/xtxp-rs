@@ -573,6 +573,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xtxp-muppet"
+version = "0.0.1"
+dependencies = [
+ "xmesh",
+ "xtxp-wire",
+]
+
+[[package]]
 name = "xtxp-wire"
 version = "0.0.1"
 dependencies = [

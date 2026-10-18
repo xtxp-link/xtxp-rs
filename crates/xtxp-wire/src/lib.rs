@@ -31,6 +31,9 @@ pub enum Input {
     Frame(Vec<u8>),
     /// A local batch, applied as one transaction.
     Edit(Vec<Op>),
+    /// A raw update made elsewhere, such as a document's seed: applied
+    /// locally and sent like an edit.
+    Apply(Vec<u8>),
     /// Switch to a fresh client ID before the next connection (decision 19).
     Reconnect(u64),
 }
@@ -128,6 +131,18 @@ impl Peer {
             Input::Frame(frame) => self.frame(&frame, &mut out),
             Input::Edit(ops) => match self.doc.edit(&ops) {
                 Ok(update) => {
+                    self.unacked = true;
+                    if self.connected {
+                        out.push(Output::Send(encode(&Message::Sync(
+                            yrs::sync::SyncMessage::Update(update),
+                        ))));
+                        out.push(self.status());
+                    }
+                }
+                Err(e) => out.push(Output::Event(Event::EditFailed(e))),
+            },
+            Input::Apply(update) => match self.doc.apply(&update) {
+                Ok(()) => {
                     self.unacked = true;
                     if self.connected {
                         out.push(Output::Send(encode(&Message::Sync(
@@ -467,5 +482,20 @@ mod tests {
         assert!(out
             .iter()
             .any(|o| matches!(o, Output::Event(Event::EditFailed(_)))));
+    }
+
+    #[test]
+    fn apply_input_pushes_a_raw_update() {
+        let mut net = Net::new();
+        let a = net.add(1);
+        let b = net.add(2);
+        net.connect(a);
+        net.connect(b);
+        net.input(a, Input::Apply(Xmesh::seed(SVG).unwrap()));
+        net.settle();
+        assert!(!net.peers[a].0.unacked());
+        assert_eq!(net.peers[b].0.doc().hash(), net.peers[a].0.doc().hash());
+        assert!(net.peers[b].0.doc().canonical().contains("circle"));
+        assert!(net.events[a].contains(&Event::LocalAcked));
     }
 }
