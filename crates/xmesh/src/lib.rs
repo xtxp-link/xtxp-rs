@@ -9,6 +9,7 @@ mod edit;
 pub mod names;
 mod node;
 mod snapshot;
+pub mod vector;
 
 pub use canonical::{canonical, hash_of};
 pub use doc::Xmesh;
