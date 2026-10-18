@@ -8,11 +8,13 @@ mod doc;
 mod edit;
 pub mod names;
 mod node;
+mod snapshot;
 
 pub use canonical::{canonical, hash_of};
 pub use doc::Xmesh;
 pub use edit::Op;
 pub use node::{parse_document, parse_fragment, Element, Node};
+pub use snapshot::Snapshot;
 
 use std::fmt;
 
