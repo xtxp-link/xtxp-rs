@@ -339,3 +339,153 @@ async fn closed_ws_viewer_is_counted_down() {
     let m = s.metrics.snapshot();
     assert_eq!((m.ws.open, m.ws.accepted), (0, 1));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn bare_root_has_noscript_refresh_and_picker() {
+    let s = start().await;
+    s.hub.show(&screen(&logo()));
+    let (status, _, body) = get(&format!("{}/", s.base), None).await;
+    assert_eq!(status, 200);
+    assert!(
+        body.contains("<noscript><meta http-equiv=\"refresh\" content=\"1\"></noscript>"),
+        "{body}"
+    );
+    assert_eq!(
+        body.matches("http-equiv=\"refresh\"").count(),
+        1,
+        "only inside noscript: {body}"
+    );
+    assert!(
+        body.contains("location.replace") && body.contains("parseHTMLUnsafe"),
+        "{body}"
+    );
+    assert!(body.contains("/live.js"), "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn metrics_flag_adds_the_script() {
+    let s = start().await;
+    let (_, _, body) = get(&format!("{}/?live=ws&metrics=1", s.base), None).await;
+    assert!(
+        body.contains("<script src=\"/metrics.js\"></script>"),
+        "{body}"
+    );
+    let (_, _, plain) = get(&format!("{}/?live=ws", s.base), None).await;
+    assert!(!plain.contains("metrics.js"));
+    let js = reqwest::get(format!("{}/metrics.js", s.base))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(js.contains("sendBeacon") && js.contains("/metrics/client"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_with_metrics_marks_each_patch_set() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let mut resp = open(&format!("{}/?live=stream&metrics=1", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut resp, &mut got, "</main>").await);
+    widen(&d, "14");
+    s.hub.show(&screen(&d));
+    assert!(
+        read_until(
+            &mut resp,
+            &mut got,
+            "<i hidden data-xtxp-seq=\"2\" data-xtxp-sent=\""
+        )
+        .await,
+        "{got}"
+    );
+}
+
+async fn metrics_json(base: &str) -> serde_json::Value {
+    serde_json::from_str(
+        &reqwest::get(format!("{base}/metrics"))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn metrics_counts_add_up() {
+    use futures_util::StreamExt;
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let mut stream = open(&format!("{}/?live=stream", s.base)).await;
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("{}/live", s.base.replace("http", "ws")))
+            .await
+            .unwrap();
+    let mut got = String::new();
+    let mut ws_bytes = 0;
+    for w in ["11", "12", "13"] {
+        widen(&d, w);
+        s.hub.show(&screen(&d));
+        assert!(read_until(&mut stream, &mut got, &format!("stroke-width=\"{w}\"")).await);
+    }
+    for _ in 0..4 {
+        let m = tokio::time::timeout(Duration::from_secs(3), ws.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        ws_bytes += m.into_text().unwrap().len();
+    }
+    let m = metrics_json(&s.base).await;
+    assert_eq!(m["modes"]["stream"]["open"], 1);
+    assert_eq!(m["modes"]["ws"]["open"], 1);
+    assert_eq!(m["modes"]["stream"]["patch_sets"], 3);
+    assert_eq!(
+        m["modes"]["ws"]["patch_sets"], 4,
+        "the whole document, then three"
+    );
+    assert_eq!(m["modes"]["ws"]["bytes"], ws_bytes);
+    assert!(m["modes"]["stream"]["bytes"].as_u64().unwrap() >= got.len() as u64);
+    assert!(m["render_us"]["p50"].as_u64().is_some());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn client_batches_are_aggregated() {
+    let s = start().await;
+    let post = |body: &'static str| {
+        let url = format!("{}/metrics/client", s.base);
+        async move {
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16()
+        }
+    };
+    assert_eq!(post(r#"{"mode":"ws","grain":"node","samples":[{"seq":2,"latency_ms":10,"vt_ms":5}],"jank":1}"#).await, 204);
+    assert_eq!(post(r#"{"mode":"ws","grain":"node","samples":[{"seq":3,"latency_ms":30,"vt_ms":7}],"jank":0}"#).await, 204);
+    assert_eq!(post("not json").await, 400);
+    let m = metrics_json(&s.base).await;
+    let c = &m["client"]["ws/node"];
+    assert_eq!(c["samples"], 2);
+    assert_eq!(c["latency_ms"]["p50"], 10, "nearest rank");
+    assert_eq!(c["latency_ms"]["p95"], 30);
+    assert_eq!(c["vt_ms"]["p50"], 5);
+    assert_eq!(c["jank"], 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn process_stats_are_present() {
+    let s = start().await;
+    let m = metrics_json(&s.base).await;
+    assert!(m["process"]["max_rss_kb"].as_u64().unwrap() > 0);
+    assert!(m["process"]["cpu_ms"].as_u64().is_some());
+    assert_eq!(m["refresh"]["ok"], 0);
+}

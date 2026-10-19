@@ -25,7 +25,11 @@ struct State {
     renderer: Renderer,
     connected: bool,
     sent_ms: u64,
+    render_us: Vec<u64>,
 }
+
+/// Render times kept for `/metrics`.
+const RENDER_SAMPLES: usize = 10_000;
 
 struct Inner {
     doc: String,
@@ -54,6 +58,7 @@ impl Hub {
                 renderer: Renderer::new(),
                 connected: false,
                 sent_ms: 0,
+                render_us: Vec::new(),
             }),
             tx,
         }))
@@ -68,10 +73,18 @@ impl Hub {
         let mut state = self.0.state.lock().expect("hub lock");
         state.connected = screen.connected;
         let now = unix_ms();
-        if let Some(patch) = state
+        let started = std::time::Instant::now();
+        let patch = state
             .renderer
-            .update(&screen.tree, &screen.snapshot_hash, now)
-        {
+            .update(&screen.tree, &screen.snapshot_hash, now);
+        if patch.is_some() {
+            let us = started.elapsed().as_micros() as u64;
+            if state.render_us.len() == RENDER_SAMPLES {
+                state.render_us.remove(0);
+            }
+            state.render_us.push(us);
+        }
+        if let Some(patch) = patch {
             state.sent_ms = now;
             // No receivers is fine: nobody is watching yet.
             let _ = self.0.tx.send(Arc::new(patch));
@@ -89,6 +102,11 @@ impl Hub {
     pub fn subscribe(&self) -> (broadcast::Receiver<Arc<PatchSet>>, Snapshot) {
         let state = self.0.state.lock().expect("hub lock");
         (self.0.tx.subscribe(), snapshot_of(&state))
+    }
+
+    /// How long each change took to render, in microseconds (both grains).
+    pub fn render_us(&self) -> Vec<u64> {
+        self.0.state.lock().expect("hub lock").render_us.clone()
     }
 
     /// The whole document as one region patch.

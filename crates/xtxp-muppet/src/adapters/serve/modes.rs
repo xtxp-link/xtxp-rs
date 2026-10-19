@@ -56,6 +56,9 @@ pub fn router_with(hub: Hub, metrics: Metrics, options: Options) -> Router {
         .route("/", get(page))
         .route("/live.js", get(live_js))
         .route("/live", get(live_ws))
+        .route("/metrics.js", get(metrics_js))
+        .route("/metrics", get(metrics_get))
+        .route("/metrics/client", axum::routing::post(metrics_post))
         .with_state(App {
             hub,
             metrics,
@@ -65,13 +68,14 @@ pub fn router_with(hub: Hub, metrics: Metrics, options: Options) -> Router {
 
 async fn page(State(app): State<App>, Query(p): Query<Params>, headers: HeaderMap) -> Response {
     match p.live.as_deref() {
-        None | Some("refresh") => refresh(&app, &p, &headers),
+        None => refresh(&app, &p, &headers, true),
+        Some("refresh") => refresh(&app, &p, &headers, false),
         Some("stream") => match grain(&p, Grain::Region) {
-            Ok(g) => stream(&app, g, p.polyfill == Some(1)),
+            Ok(g) => stream(&app, g, p.polyfill == Some(1), p.metrics == Some(1)),
             Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
         },
         Some("ws") => match grain(&p, Grain::Node) {
-            Ok(g) => ws_page(&app, g),
+            Ok(g) => ws_page(&app, g, p.metrics == Some(1)),
             Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
         },
         Some(_) => (
@@ -94,7 +98,9 @@ fn html(body: String) -> Response {
 }
 
 /// The baseline: a full page that refreshes itself, and `304` while nothing changed.
-fn refresh(app: &App, p: &Params, headers: &HeaderMap) -> Response {
+/// With `auto`, the page with no `live` parameter: the refresh only inside
+/// `<noscript>`, and a script that picks stream or WebSocket.
+fn refresh(app: &App, p: &Params, headers: &HeaderMap, auto: bool) -> Response {
     let now = app.hub.current();
     let etag = format!("\"{}\"", now.snapshot);
     let unchanged = !now.snapshot.is_empty()
@@ -106,10 +112,19 @@ fn refresh(app: &App, p: &Params, headers: &HeaderMap) -> Response {
         return StatusCode::NOT_MODIFIED.into_response();
     }
     app.metrics.refresh_status(200);
-    let head = format!(
+    let meta = format!(
         "<meta http-equiv=\"refresh\" content=\"{}\">",
         p.every.unwrap_or(1)
     );
+    let head = if auto {
+        format!("<noscript>{meta}</noscript>")
+    } else {
+        meta
+    };
+    let mut body_end = metrics_tag(p.metrics == Some(1));
+    if auto {
+        body_end.push_str(PICKER);
+    }
     let mut resp = html(render_page(
         &now.region_html,
         &PageInfo {
@@ -119,7 +134,7 @@ fn refresh(app: &App, p: &Params, headers: &HeaderMap) -> Response {
             seq: now.seq,
             sent_ms: now.sent_ms,
             head: &head,
-            body_end: "",
+            body_end: &body_end,
         },
     ));
     if !now.snapshot.is_empty() {
@@ -161,6 +176,13 @@ fn open_page(app: &App, now: &Snapshot, head: &str, body_end: &str) -> String {
         .to_string()
 }
 
+/// One patch set as a viewer receives it.
+pub(crate) struct Sent {
+    pub seq: u64,
+    pub sent_ms: u64,
+    pub html: String,
+}
+
 /// What a viewer receives after its first page: newer patch sets, a region
 /// resync when it falls behind, and nothing older than where it started.
 pub(crate) struct Feed {
@@ -184,20 +206,28 @@ impl Feed {
         (feed, now)
     }
 
-    /// The next patch set's HTML, or `None` once the hub is gone.
-    pub(crate) async fn next(&mut self) -> Option<String> {
+    /// The next patch set, or `None` once the hub is gone.
+    pub(crate) async fn next(&mut self) -> Option<Sent> {
         loop {
             match self.rx.recv().await {
                 Ok(p) if p.seq <= self.after => continue,
                 Ok(p) => {
                     self.after = p.seq;
-                    return Some(p.html(self.grain).to_string());
+                    return Some(Sent {
+                        seq: p.seq,
+                        sent_ms: p.sent_ms,
+                        html: p.html(self.grain).to_string(),
+                    });
                 }
                 Err(RecvError::Lagged(_)) => {
                     self.metrics.resync();
                     let full = self.hub.full();
                     self.after = full.seq;
-                    return Some(full.html(Grain::Region).to_string());
+                    return Some(Sent {
+                        seq: full.seq,
+                        sent_ms: full.sent_ms,
+                        html: full.html(Grain::Region).to_string(),
+                    });
                 }
                 Err(RecvError::Closed) => return None,
             }
@@ -207,25 +237,26 @@ impl Feed {
 
 /// The patch stream: the page, then the response stays open and each change
 /// arrives as `<template for>` children of `<body>`.
-fn stream(app: &App, grain: Grain, polyfill: bool) -> Response {
+fn stream(app: &App, grain: Grain, polyfill: bool, measure: bool) -> Response {
     let guard = app.metrics.opened(Mode::Stream);
     let (feed, now) = Feed::new(&app.hub, &app.metrics, grain);
-    let script = if polyfill {
-        script_tag("stream", grain)
-    } else {
-        String::new()
-    };
+    let mut script = metrics_tag(measure);
+    if polyfill {
+        script.push_str(&script_tag("stream", grain));
+    }
     let first = open_page(app, &now, "", &script);
     app.metrics.sent(Mode::Stream, first.len(), false);
     let heartbeat = app.options.heartbeat;
     let beat = tokio::time::interval_at(tokio::time::Instant::now() + heartbeat, heartbeat);
     struct St {
+        measure: bool,
         feed: Feed,
         beat: tokio::time::Interval,
         metrics: Metrics,
         _guard: ConnGuard,
     }
     let st = St {
+        measure,
         feed,
         beat,
         metrics: app.metrics.clone(),
@@ -233,7 +264,19 @@ fn stream(app: &App, grain: Grain, polyfill: bool) -> Response {
     };
     let rest = futures_util::stream::unfold(st, |mut st| async move {
         let (chunk, patch) = tokio::select! {
-            next = st.feed.next() => (next?, true),
+            next = st.feed.next() => {
+                let next = next?;
+                let mut chunk = next.html;
+                if st.measure {
+                    // Native patches consume their template, data-seq and all, so
+                    // metrics.js watches for this instead.
+                    chunk.push_str(&format!(
+                        "<i hidden data-xtxp-seq=\"{}\" data-xtxp-sent=\"{}\"></i>",
+                        next.seq, next.sent_ms
+                    ));
+                }
+                (chunk, true)
+            }
             _ = st.beat.tick() => ("<!--hb-->".to_string(), false),
         };
         st.metrics.sent(Mode::Stream, chunk.len(), patch);
@@ -288,7 +331,7 @@ mod tests {
             .unwrap();
             show(&d);
         }
-        let first = feed.next().await.unwrap();
+        let first = feed.next().await.unwrap().html;
         assert!(first.starts_with("<template for=\"doc\""), "{first}");
         assert!(first.contains("stroke-width=\"89\""));
         assert_eq!(metrics.snapshot().resyncs, 1);
@@ -300,7 +343,7 @@ mod tests {
         }])
         .unwrap();
         show(&d);
-        let next = feed.next().await.unwrap();
+        let next = feed.next().await.unwrap().html;
         assert!(next.contains("stroke-width=\"1\""), "{next}");
     }
 }
@@ -332,7 +375,7 @@ async fn live_js() -> Response {
 }
 
 /// The WebSocket mode's page: complete, with the polyfill.
-fn ws_page(app: &App, grain: Grain) -> Response {
+fn ws_page(app: &App, grain: Grain, measure: bool) -> Response {
     let now = app.hub.current();
     html(render_page(
         &now.region_html,
@@ -343,7 +386,7 @@ fn ws_page(app: &App, grain: Grain) -> Response {
             seq: now.seq,
             sent_ms: now.sent_ms,
             head: "",
-            body_end: &script_tag("ws", grain),
+            body_end: &(metrics_tag(measure) + &script_tag("ws", grain)),
         },
     ))
 }
@@ -384,7 +427,7 @@ async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebS
     loop {
         tokio::select! {
             next = feed.next() => {
-                let Some(html) = next else { return };
+                let Some(Sent { html, .. }) = next else { return };
                 app.metrics.sent(Mode::Ws, html.len(), true);
                 if socket.send(Message::Text(html.into())).await.is_err() {
                     return;
@@ -395,5 +438,54 @@ async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebS
                 Some(Ok(_)) => {}
             },
         }
+    }
+}
+
+const METRICS_JS: &str = include_str!("../../../assets/metrics.js");
+
+/// Picks a mode for a browser with JavaScript: the patch stream where
+/// `<template for>` works natively, the WebSocket polyfill otherwise.
+const PICKER: &str = r#"<script>(function () {
+  var ok = false;
+  try {
+    var d = Document.parseHTMLUnsafe('<div id="t"><?start name="t"><?end><template for="t">x</template></div>');
+    ok = d.getElementById('t').textContent === 'x';
+  } catch (e) {}
+  var keep = new URLSearchParams(location.search).get('metrics') === '1' ? '&metrics=1' : '';
+  if (ok) { location.replace('?live=stream' + keep); return; }
+  var s = document.createElement('script');
+  s.src = '/live.js'; s.dataset.mode = 'ws'; s.dataset.grain = 'node';
+  document.body.appendChild(s);
+})();</script>"#;
+
+/// The measurement script's tag, before any other script so it sees every patch.
+fn metrics_tag(on: bool) -> String {
+    if on {
+        "<script src=\"/metrics.js\"></script>".to_string()
+    } else {
+        String::new()
+    }
+}
+
+async fn metrics_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        METRICS_JS,
+    )
+        .into_response()
+}
+
+async fn metrics_get(State(app): State<App>) -> Response {
+    let body = app.metrics.to_json(&app.hub.render_us()).to_string();
+    ([(header::CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+async fn metrics_post(State(app): State<App>, body: String) -> Response {
+    match serde_json::from_str::<super::metrics::ClientBatch>(&body) {
+        Ok(batch) => {
+            app.metrics.client_batch(batch);
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, format!("{e}\n")).into_response(),
     }
 }
