@@ -61,12 +61,12 @@ target/release/xtxp-muppet open demo
 In `open`:
 - **↑ ↓** move;
 - **← →** fold and unfold;
-- **Enter** edits a text node, or lists an element's attributes: Enter edits one, Backspace or Delete removes it, and the last row, `+ add attribute`, adds one (as does `a`);
+- **Enter** edits a text node, or lists an element's attributes: Enter edits one, **← →** nudge a numeric one by its last digit (Shift for ×10), Backspace or Delete removes one, and the last row, `+ add attribute`, adds one (as does `a`);
 - **a** adds an attribute;
 - **i** inserts a child, written as XML;
 - **d** deletes;
 - **m** marks a node to move, then **m** on its new parent;
-- **q** quits.
+- **q** or **Ctrl-C** quits.
 
 `open --read-only` watches without editing.
 
