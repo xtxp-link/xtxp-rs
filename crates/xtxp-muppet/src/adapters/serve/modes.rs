@@ -52,18 +52,26 @@ pub fn router(hub: Hub, metrics: Metrics) -> Router {
 }
 
 pub fn router_with(hub: Hub, metrics: Metrics, options: Options) -> Router {
-    Router::new().route("/", get(page)).with_state(App {
-        hub,
-        metrics,
-        options,
-    })
+    Router::new()
+        .route("/", get(page))
+        .route("/live.js", get(live_js))
+        .route("/live", get(live_ws))
+        .with_state(App {
+            hub,
+            metrics,
+            options,
+        })
 }
 
 async fn page(State(app): State<App>, Query(p): Query<Params>, headers: HeaderMap) -> Response {
     match p.live.as_deref() {
         None | Some("refresh") => refresh(&app, &p, &headers),
         Some("stream") => match grain(&p, Grain::Region) {
-            Ok(g) => stream(&app, g),
+            Ok(g) => stream(&app, g, p.polyfill == Some(1)),
+            Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+        },
+        Some("ws") => match grain(&p, Grain::Node) {
+            Ok(g) => ws_page(&app, g),
             Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
         },
         Some(_) => (
@@ -199,10 +207,15 @@ impl Feed {
 
 /// The patch stream: the page, then the response stays open and each change
 /// arrives as `<template for>` children of `<body>`.
-fn stream(app: &App, grain: Grain) -> Response {
+fn stream(app: &App, grain: Grain, polyfill: bool) -> Response {
     let guard = app.metrics.opened(Mode::Stream);
     let (feed, now) = Feed::new(&app.hub, &app.metrics, grain);
-    let first = open_page(app, &now, "", "");
+    let script = if polyfill {
+        script_tag("stream", grain)
+    } else {
+        String::new()
+    };
+    let first = open_page(app, &now, "", &script);
     app.metrics.sent(Mode::Stream, first.len(), false);
     let heartbeat = app.options.heartbeat;
     let beat = tokio::time::interval_at(tokio::time::Instant::now() + heartbeat, heartbeat);
@@ -289,5 +302,98 @@ mod tests {
         show(&d);
         let next = feed.next().await.unwrap();
         assert!(next.contains("stroke-width=\"1\""), "{next}");
+    }
+}
+
+const LIVE_JS: &str = include_str!("../../../assets/live.js");
+
+fn grain_name(grain: Grain) -> &'static str {
+    match grain {
+        Grain::Node => "node",
+        Grain::Region => "region",
+    }
+}
+
+/// The polyfill's tag. Not `defer`: in stream mode the document never
+/// finishes parsing, so a deferred script would never run.
+fn script_tag(mode: &str, grain: Grain) -> String {
+    format!(
+        "<script src=\"/live.js\" data-mode=\"{mode}\" data-grain=\"{}\"></script>",
+        grain_name(grain)
+    )
+}
+
+async fn live_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        LIVE_JS,
+    )
+        .into_response()
+}
+
+/// The WebSocket mode's page: complete, with the polyfill.
+fn ws_page(app: &App, grain: Grain) -> Response {
+    let now = app.hub.current();
+    html(render_page(
+        &now.region_html,
+        &PageInfo {
+            doc: app.hub.doc(),
+            snapshot: &now.snapshot,
+            connected: now.connected,
+            seq: now.seq,
+            sent_ms: now.sent_ms,
+            head: "",
+            body_end: &script_tag("ws", grain),
+        },
+    ))
+}
+
+#[derive(Deserialize)]
+struct LiveParams {
+    grain: Option<String>,
+}
+
+async fn live_ws(
+    State(app): State<App>,
+    Query(p): Query<LiveParams>,
+    upgrade: axum::extract::ws::WebSocketUpgrade,
+) -> Response {
+    let g = match grain(
+        &Params {
+            grain: p.grain,
+            ..Params::default()
+        },
+        Grain::Node,
+    ) {
+        Ok(g) => g,
+        Err(e) => return (StatusCode::BAD_REQUEST, e).into_response(),
+    };
+    upgrade.on_upgrade(move |socket| live_socket(app, g, socket))
+}
+
+/// One viewer's WebSocket: the whole document first, then each patch set.
+async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebSocket) {
+    use axum::extract::ws::Message;
+    let _guard = app.metrics.opened(Mode::Ws);
+    let (mut feed, now) = Feed::new(&app.hub, &app.metrics, grain);
+    let first = crate::render::template("doc", now.seq, now.sent_ms, &now.region_html);
+    app.metrics.sent(Mode::Ws, first.len(), true);
+    if socket.send(Message::Text(first.into())).await.is_err() {
+        return;
+    }
+    loop {
+        tokio::select! {
+            next = feed.next() => {
+                let Some(html) = next else { return };
+                app.metrics.sent(Mode::Ws, html.len(), true);
+                if socket.send(Message::Text(html.into())).await.is_err() {
+                    return;
+                }
+            }
+            incoming = socket.recv() => match incoming {
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return,
+                Some(Ok(_)) => {}
+            },
+        }
     }
 }

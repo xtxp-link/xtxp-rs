@@ -245,3 +245,97 @@ async fn bad_grain_is_400() {
     let (status, _, _) = get(&format!("{}/?live=stream&grain=atom", s.base), None).await;
     assert_eq!(status, 400);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_page_loads_live_js() {
+    let s = start().await;
+    s.hub.show(&screen(&logo()));
+    let (status, _, body) = get(&format!("{}/?live=ws", s.base), None).await;
+    assert_eq!(status, 200);
+    assert!(
+        body.contains("<script src=\"/live.js\" data-mode=\"ws\" data-grain=\"node\""),
+        "{body}"
+    );
+    assert!(
+        body.contains("</body>"),
+        "a ws page is a complete page: {body}"
+    );
+    let js = reqwest::get(format!("{}/live.js", s.base)).await.unwrap();
+    assert_eq!(
+        js.headers()["content-type"],
+        "text/javascript; charset=utf-8"
+    );
+    let js = js.text().await.unwrap();
+    assert!(js.contains("startViewTransition") && js.contains("createContextualFragment"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_first_message_is_region_then_patches() {
+    use futures_util::StreamExt;
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let url = format!("{}/live?grain=node", s.base.replace("http", "ws"));
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    let next = |m: Option<Result<tokio_tungstenite::tungstenite::Message, _>>| {
+        m.unwrap().unwrap().into_text().unwrap().to_string()
+    };
+    let first = next(
+        tokio::time::timeout(Duration::from_secs(3), ws.next())
+            .await
+            .unwrap(),
+    );
+    assert!(
+        first.starts_with("<template for=\"doc\" data-seq=\"1\""),
+        "{first}"
+    );
+    widen(&d, "14");
+    s.hub.show(&screen(&d));
+    let second = next(
+        tokio::time::timeout(Duration::from_secs(3), ws.next())
+            .await
+            .unwrap(),
+    );
+    assert!(second.starts_with("<template for=\"n0-"), "{second}");
+    assert!(second.contains("stroke-width=\"14\""));
+    let m = s.metrics.snapshot();
+    assert_eq!((m.ws.open, m.ws.patch_sets), (1, 2));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_polyfill_flag_adds_the_script() {
+    let s = start().await;
+    let mut resp = open(&format!("{}/?live=stream&polyfill=1", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut resp, &mut got, "</main>").await);
+    assert!(
+        read_until(
+            &mut resp,
+            &mut got,
+            "<script src=\"/live.js\" data-mode=\"stream\" data-grain=\"region\"></script>"
+        )
+        .await,
+        "{got}"
+    );
+    let mut plain = open(&format!("{}/?live=stream", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut plain, &mut got, "</main>").await);
+    assert!(!got.contains("live.js"), "{got}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn closed_ws_viewer_is_counted_down() {
+    let s = start().await;
+    s.hub.show(&screen(&logo()));
+    let url = format!("{}/live", s.base.replace("http", "ws"));
+    let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(s.metrics.snapshot().ws.open, 1);
+    drop(ws);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while s.metrics.snapshot().ws.open != 0 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let m = s.metrics.snapshot();
+    assert_eq!((m.ws.open, m.ws.accepted), (0, 1));
+}
