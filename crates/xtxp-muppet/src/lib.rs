@@ -9,3 +9,4 @@ pub mod adapters;
 pub mod core;
 pub mod ops_words;
 pub mod ports;
+pub mod render;
