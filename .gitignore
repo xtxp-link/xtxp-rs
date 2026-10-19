@@ -1,3 +1,5 @@
 /target
 /.ysweet-data
 /.tools
+/tests/browser/node_modules
+/tests/browser/test-results
