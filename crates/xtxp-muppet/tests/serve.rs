@@ -93,7 +93,7 @@ async fn refresh_page_has_meta_and_etag() {
         body.contains("<meta http-equiv=\"refresh\" content=\"1\">"),
         "{body}"
     );
-    assert_eq!(tag, Some(format!("\"{}\"", d.snapshot_hash())));
+    assert_eq!(tag, Some(format!("\"{}-live\"", d.snapshot_hash())));
     assert!(body.contains("stroke-width=\"9.9\""));
     assert!(body.contains("● live"));
 }
@@ -488,4 +488,51 @@ async fn process_stats_are_present() {
     assert!(m["process"]["max_rss_kb"].as_u64().unwrap() > 0);
     assert!(m["process"]["cpu_ms"].as_u64().is_some());
     assert_eq!(m["refresh"]["ok"], 0);
+}
+
+fn offline(d: &Xmesh) -> Screen {
+    Screen {
+        connected: false,
+        ..screen(d)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_viewer_sees_the_connection_state_change() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&offline(&d));
+    let mut resp = open(&format!("{}/?live=stream", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut resp, &mut got, "</main>").await);
+    assert!(
+        got.contains("<?start name=\"state\">"),
+        "the state is patchable: {got}"
+    );
+    s.hub.show(&screen(&d));
+    assert!(
+        read_until(&mut resp, &mut got, "<template for=\"state\"").await,
+        "{got}"
+    );
+    assert!(read_until(&mut resp, &mut got, "● live").await, "{got}");
+    s.hub.show(&offline(&d));
+    let mut more = String::new();
+    assert!(
+        read_until(&mut resp, &mut more, "○ connecting<").await,
+        "{more}"
+    );
+    assert!(more.contains("<template for=\"state\""), "{more}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn refresh_etag_follows_the_connection_state() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let url = format!("{}/?live=refresh", s.base);
+    let (_, tag, _) = get(&url, None).await;
+    s.hub.show(&offline(&d));
+    let (status, _, body) = get(&url, tag.as_deref()).await;
+    assert_eq!(status, 200, "same document, but the state changed");
+    assert!(body.contains("○ connecting"));
 }

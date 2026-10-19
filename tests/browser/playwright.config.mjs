@@ -16,6 +16,8 @@ export default defineConfig({
   testDir: '.',
   timeout: 30_000,
   workers: 1,
+  // One retry, for headless Chromium's occasional meta-refresh stall (see modes.spec.mjs).
+  retries: 1,
   reporter: [['list']],
   projects: [
     { name: 'chromium-158', use: { browserName: 'chromium', launchOptions: { executablePath: snapshot } } },

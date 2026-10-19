@@ -46,8 +46,9 @@ export async function startStack() {
   execFileSync(muppet, ['--server', server, 'init', LOGO, '--doc', 'logo'], { stdio: 'ignore' });
   const webPort = await freePort();
   const base = `http://127.0.0.1:${webPort}`;
+  const log = process.env.SERVE_LOG ? (await import('node:fs')).openSync(process.env.SERVE_LOG, 'a') : 'ignore';
   const startServe = () =>
-    spawn(muppet, ['--server', server, 'serve', 'logo', '--listen', `127.0.0.1:${webPort}`], { stdio: 'ignore' });
+    spawn(muppet, ['--server', server, 'serve', 'logo', '--listen', `127.0.0.1:${webPort}`], { stdio: ['ignore', 'ignore', log] });
   const live = () =>
     until('serve', async () => (await (await fetch(`${base}/?live=refresh`)).text()).includes('● live'));
   let serve = startServe();

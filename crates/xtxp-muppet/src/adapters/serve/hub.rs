@@ -1,7 +1,7 @@
 //! One document's current page and its patch sets, fanned out to every viewer.
 
 use crate::ports::{Outcome, Screen, View};
-use crate::render::{PatchSet, Renderer};
+use crate::render::{state_html, template, PatchSet, Renderer};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
@@ -71,6 +71,7 @@ impl Hub {
     /// Renders a new screen and publishes its patch set, if anything changed.
     pub fn show(&self, screen: &Screen) {
         let mut state = self.0.state.lock().expect("hub lock");
+        let state_changed = state.connected != screen.connected;
         state.connected = screen.connected;
         let now = unix_ms();
         let started = std::time::Instant::now();
@@ -84,6 +85,28 @@ impl Hub {
             }
             state.render_us.push(us);
         }
+        // A change of connection state patches the header's state marker,
+        // with the content's patch set or on its own.
+        let patch = match (patch, state_changed) {
+            (Some(mut p), true) => {
+                let st = template("state", p.seq, now, &state_html(screen.connected));
+                p.node_html.push_str(&st);
+                p.region_html.push_str(&st);
+                Some(p)
+            }
+            (None, true) => {
+                let seq = state.renderer.next_seq();
+                let st = template("state", seq, now, &state_html(screen.connected));
+                Some(PatchSet {
+                    seq,
+                    sent_ms: now,
+                    snapshot: screen.snapshot_hash.clone(),
+                    node_html: st.clone(),
+                    region_html: st,
+                })
+            }
+            (p, false) => p,
+        };
         if let Some(patch) = patch {
             state.sent_ms = now;
             // No receivers is fine: nobody is watching yet.
@@ -139,6 +162,8 @@ impl View for HubView {
     fn show(&mut self, screen: &Screen) {
         self.0.show(screen)
     }
-    fn status(&mut self, _: &str) {}
+    fn status(&mut self, line: &str) {
+        eprintln!("{line}");
+    }
     fn finished(&mut self, _: &Outcome) {}
 }

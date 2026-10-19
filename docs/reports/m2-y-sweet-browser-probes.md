@@ -17,3 +17,7 @@ What `tests/browser/probes.spec.mjs` found, run on 2026-10-19 in this repository
 2. **A streamed patch is not animated.** With no script, a `<template for>` patch replaces the content instantly. Animating it needs the one `document.startViewTransition()` call, which needs script; no-JS streaming is live but not animated.
 3. **SVG children don't take part in view transitions.** `view-transition-name` on elements inside an `<svg>` is ignored: only boxes in the CSS layout (the `<svg>` element itself) get groups. A change inside the drawing animates as a cross-fade of the whole drawing. Per-element animation needs an HTML layer over the drawing, or SVG/SMIL or CSS animations of its own.
 4. **Detecting `<template for>`** works with `Document.parseHTMLUnsafe` and a marker pair, as the bare page's picker does.
+
+## A flake in headless Chromium
+
+About 1 run in 20, in both versions, a page with JavaScript off on the refresh loop receives a reload's `200` with the new document and then never shows it: the navigation isn't committed and the meta refresh stops. Logs from `serve` (the request, its `If-None-Match`, the `ETag` and the status) and from the test (each response's body) showed the server's answer was correct. Removing the cross-document view transition rule didn't stop it. The browser tests allow one retry for it; whether a real, visible Chrome ever does this is on the cross-test checklist.

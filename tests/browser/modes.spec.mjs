@@ -10,6 +10,9 @@ let colour = 0;
 test.beforeAll(async () => (stack = await startStack()));
 test.afterAll(() => stack?.stop());
 
+// A refreshing page can navigate mid-evaluate; that's "not yet", not a failure.
+const crossOf = (page) => page.evaluate(cross).catch(() => null);
+
 const next = () => `#00${(++colour).toString(16).padStart(2, '0')}00`;
 
 const MODES = [
@@ -24,10 +27,10 @@ for (const { q, projects } of MODES) {
   test(`an edit reaches ${q} as SVG`, async ({ page }, info) => {
     test.skip(!projects.includes(info.project.name), `not run in ${info.project.name}`);
     await page.goto(stack.base + '/' + q, { waitUntil: 'commit' });
-    await expect.poll(() => page.evaluate(cross)).not.toBeNull();
+    await expect.poll(() => crossOf(page)).not.toBeNull();
     const want = next();
     stack.edit('set-attr', '2/0', 'stroke', want);
-    await expect.poll(() => page.evaluate(cross), { timeout: 3000 }).toEqual({
+    await expect.poll(() => crossOf(page), { timeout: 3000 }).toEqual({
       stroke: want,
       width: expect.any(String),
       ns: 'http://www.w3.org/2000/svg',
@@ -40,9 +43,9 @@ for (const q of ['?live=stream', '?live=ws&grain=node']) {
   test(`patches in ${q} parse back to the rendered tree`, async ({ page, browser }, info) => {
     test.skip(q.includes('stream') && info.project.name !== 'chromium-158', 'native stream needs 158');
     await page.goto(stack.base + '/' + q, { waitUntil: 'commit' });
-    await expect.poll(() => page.evaluate(cross)).not.toBeNull();
+    await expect.poll(() => crossOf(page)).not.toBeNull();
     for (const w of ['11', '12', '13']) stack.edit('set-attr', '2/0', 'stroke-width', w);
-    await expect.poll(() => page.evaluate(cross).then((c) => c.width), { timeout: 3000 }).toBe('13');
+    await expect.poll(() => crossOf(page).then((c) => c?.width), { timeout: 3000 }).toBe('13');
     const fresh = await browser.newPage();
     await fresh.goto(stack.base + '/?live=refresh');
     expect(await page.evaluate(svgShape)).toBe(await fresh.evaluate(svgShape));
@@ -60,6 +63,10 @@ test('no parameters picks stream in 158 and the WebSocket in 141', async ({ page
 });
 
 test('JavaScript off gets the refresh loop', async ({ browser }) => {
+  // Known flake, about 1 run in 20: headless Chromium sometimes receives a
+  // meta-refresh reload's 200 but never commits it, and the loop stops. The
+  // server's answer was checked correct; see docs/reports/m2-y-sweet-browser-probes.md.
+  test.info().annotations.push({ type: 'retry', description: 'headless meta-refresh stall' });
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto(stack.base + '/');
@@ -76,5 +83,5 @@ test('live.js reconnects after the server drops it', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.xtxpLive?.connected === true), { timeout: 10_000 }).toBe(true);
   const want = next();
   stack.edit('set-attr', '2/0', 'stroke', want);
-  await expect.poll(() => page.evaluate(cross).then((c) => c.stroke), { timeout: 3000 }).toBe(want);
+  await expect.poll(() => crossOf(page).then((c) => c?.stroke), { timeout: 3000 }).toBe(want);
 });

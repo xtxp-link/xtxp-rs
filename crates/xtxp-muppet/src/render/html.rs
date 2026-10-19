@@ -219,19 +219,25 @@ header code { color: #6b7080; }\n\
 main { padding: 0 16px 16px; }\n\
 main svg { max-width: 100%; height: auto; display: block; }\n";
 
-/// A full HTML page around an already-rendered region.
-pub fn render_page(region: &str, info: &PageInfo) -> String {
-    let short: String = info.snapshot.chars().take(16).collect();
-    let state = if info.connected {
+/// The header's connection state, in its own marker so it can be patched.
+pub fn state_html(connected: bool) -> String {
+    let state = if connected {
         "● live"
     } else {
         "○ connecting"
     };
+    format!("<?start name=\"state\"><span>{state}</span><?end>")
+}
+
+/// A full HTML page around an already-rendered region.
+pub fn render_page(region: &str, info: &PageInfo) -> String {
+    let short: String = info.snapshot.chars().take(16).collect();
+    let state = state_html(info.connected);
     format!(
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
 <title>{doc} · XTXP</title><style>{STYLE}</style>{head}</head>\
-<body data-seq=\"{seq}\" data-sent=\"{sent}\"><header><b>{doc}</b><code>@{short}</code><span>{state}</span></header>\
+<body data-seq=\"{seq}\" data-sent=\"{sent}\"><header><b>{doc}</b><code>@{short}</code>{state}</header>\
 <main>{region}</main>{body_end}</body></html>\n",
         doc = escape_text(info.doc),
         head = info.head,

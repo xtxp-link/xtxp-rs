@@ -102,7 +102,9 @@ fn html(body: String) -> Response {
 /// `<noscript>`, and a script that picks stream or WebSocket.
 fn refresh(app: &App, p: &Params, headers: &HeaderMap, auto: bool) -> Response {
     let now = app.hub.current();
-    let etag = format!("\"{}\"", now.snapshot);
+    // The header shows the connection state, so it's part of the page's identity.
+    let state = if now.connected { "live" } else { "off" };
+    let etag = format!("\"{}-{state}\"", now.snapshot);
     let unchanged = !now.snapshot.is_empty()
         && headers
             .get(header::IF_NONE_MATCH)

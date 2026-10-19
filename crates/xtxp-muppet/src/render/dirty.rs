@@ -123,6 +123,13 @@ impl Renderer {
         }
     }
 
+    /// Takes the next sequence number for a patch set made outside the tree,
+    /// such as the connection state.
+    pub fn next_seq(&mut self) -> u64 {
+        self.seq += 1;
+        self.seq
+    }
+
     pub fn tree(&self) -> &[IdNode] {
         &self.tree
     }
