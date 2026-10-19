@@ -13,16 +13,21 @@ use crate::adapters::ws;
 use crate::core::Mode as CoreMode;
 use std::net::SocketAddr;
 
-/// Watches `doc` on y-sweet at `server` and serves it on `listen` until Ctrl-C.
-pub fn run(server: &str, doc: &str, listen: SocketAddr) -> Result<(), String> {
+/// Starts watching `doc` on y-sweet at `server`: the watch-only core on its
+/// own thread and runtime, feeding a new hub. It never finishes on its own;
+/// it ends with the process.
+pub fn start(server: &str, doc: &str) -> (Hub, Metrics) {
     let hub = Hub::new(doc);
-    let metrics = Metrics::new();
     let (server, doc, view) = (server.to_string(), doc.to_string(), HubView(hub.clone()));
-    // The y-sweet side: the watch-only core on its own thread and runtime. It
-    // never finishes on its own; it ends with the process.
     std::thread::spawn(move || {
         ws::run(CoreMode::Interactive, &server, &doc, view, None);
     });
+    (hub, Metrics::new())
+}
+
+/// Watches `doc` on y-sweet at `server` and serves it on `listen` until Ctrl-C.
+pub fn run(server: &str, doc: &str, listen: SocketAddr) -> Result<(), String> {
+    let (hub, metrics) = start(server, doc);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
