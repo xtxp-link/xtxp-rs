@@ -134,7 +134,22 @@ pub fn draw(frame: &mut Frame, model: &Model, screen: &Screen, now_ms: u64) {
         InputMode::AddAttrValue { name, buffer } => format!("{name} = {buffer}▏"),
         InputMode::InsertXml { buffer } => format!("insert first child (XML): {buffer}▏"),
         InputMode::MovePending(_) => "move: select the new parent and press m; Esc cancels".into(),
-        InputMode::AttrList { .. } => "Enter edit  ⌫ remove  a add  Esc back".into(),
+        InputMode::AttrList { index } => {
+            let step = match model
+                .selected
+                .and_then(|id| find(&screen.tree, id))
+                .map(|n| &n.node)
+            {
+                Some(IdNodeKind::Element { attrs, .. }) => attrs
+                    .get(*index)
+                    .and_then(|(_, v)| super::keys::nudge_step(v)),
+                _ => None,
+            };
+            match step {
+                Some(step) => format!("Enter edit  ←→ ±{step} (⇧ ×10)  ⌫ remove  a add  Esc back"),
+                None => "Enter edit  ⌫ remove  a add  Esc back".into(),
+            }
+        }
         InputMode::Browse if !model.status.is_empty() => model.status.clone(),
         InputMode::Browse => HINTS.into(),
     };
@@ -264,5 +279,42 @@ mod tests {
             buffer[(x, row)].modifier.contains(Modifier::REVERSED),
             "the add row is highlighted when selected"
         );
+    }
+    #[test]
+    fn hint_offers_nudging_on_a_numeric_attribute() {
+        let d = Xmesh::new(1).unwrap();
+        d.apply(
+            &Xmesh::seed(r#"<svg xmlns="http://www.w3.org/2000/svg"><rect id="r1" x="20"/></svg>"#)
+                .unwrap(),
+        )
+        .unwrap();
+        let screen = Screen {
+            tree: d.tree_with_ids(),
+            snapshot_hash: d.snapshot_hash(),
+            doc_hash: d.hash(),
+            connected: true,
+            changed: vec![],
+        };
+        let mut model = super::super::model::Model::new("demo", false);
+        super::super::keys::after_show(&mut model, &Screen::default(), &screen, 0);
+        model.selected = match &super::super::model::root(&screen.tree).unwrap().node {
+            xmesh::IdNodeKind::Element { children, .. } => Some(children[0].id),
+            _ => unreachable!(),
+        };
+        let text = |model: &super::super::model::Model| {
+            let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+            terminal.draw(|f| draw(f, model, &screen, 0)).unwrap();
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|c| c.symbol())
+                .collect::<String>()
+        };
+        model.mode = InputMode::AttrList { index: 1 };
+        assert!(text(&model).contains("←→ ±1"), "on x");
+        model.mode = InputMode::AttrList { index: 0 };
+        assert!(!text(&model).contains("←→"), "not on id");
     }
 }

@@ -5,7 +5,7 @@ use super::model::{EditTarget, InputMode, Model};
 use crate::core::Command;
 use crate::ports::Screen;
 use ratatui::crossterm::event::KeyEventKind;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
 use xmesh::{IdNode, IdNodeKind, NodeId};
 
@@ -74,6 +74,13 @@ fn seen(screen: &Screen) -> Command {
 /// Handles one key press; returns the commands it produces.
 pub fn handle(model: &mut Model, screen: &Screen, key: KeyEvent) -> Vec<Command> {
     if key.kind != KeyEventKind::Press {
+        return vec![];
+    }
+    // ^C quits from anywhere, as in other terminal apps; a value still being
+    // typed is dropped, and everything already applied has been sent.
+    if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        model.mode = InputMode::Browse;
+        model.quit = true;
         return vec![];
     }
     let mode = model.mode.clone();
@@ -299,6 +306,31 @@ fn attr_list(model: &mut Model, screen: &Screen, key: KeyEvent, index: usize) ->
             }
             None => model.mode = add_name(),
         },
+        KeyCode::Left | KeyCode::Right if editing_allowed(model) => {
+            let size = if key.modifiers.contains(KeyModifiers::SHIFT) {
+                10
+            } else {
+                1
+            };
+            let steps = if key.code == KeyCode::Right {
+                size
+            } else {
+                -size
+            };
+            model.mode = InputMode::AttrList { index };
+            if let Some((name, value)) = attrs.get(index) {
+                if let Some(value) = nudge(value, steps) {
+                    return vec![
+                        seen(screen),
+                        Command::SetAttr {
+                            node: node.id,
+                            name: name.clone(),
+                            value,
+                        },
+                    ];
+                }
+            }
+        }
         KeyCode::Char('a') if editing_allowed(model) => model.mode = add_name(),
         KeyCode::Char('x') | KeyCode::Backspace | KeyCode::Delete if editing_allowed(model) => {
             if let Some((name, _)) = attrs.get(index) {
@@ -317,6 +349,58 @@ fn attr_list(model: &mut Model, screen: &Screen, key: KeyEvent, index: usize) ->
         _ => model.mode = InputMode::AttrList { index },
     }
     vec![]
+}
+
+/// A value that is one number with an optional unit (`20`, `-1.5`, `50px`,
+/// `100%`): its digits as an integer, its number of decimals, and the unit.
+fn parse_number(value: &str) -> Option<(i128, usize, &str)> {
+    let (negative, rest) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value),
+    };
+    let int_len = rest.bytes().take_while(u8::is_ascii_digit).count();
+    if int_len == 0 {
+        return None;
+    }
+    let (frac, unit) = match rest[int_len..].strip_prefix('.') {
+        Some(after) => {
+            let n = after.bytes().take_while(u8::is_ascii_digit).count();
+            if n == 0 {
+                return None;
+            }
+            (&after[..n], &after[n..])
+        }
+        None => ("", &rest[int_len..]),
+    };
+    if int_len + frac.len() > 30 || !unit.chars().all(|c| c.is_ascii_alphabetic() || c == '%') {
+        return None;
+    }
+    let digits: i128 = format!("{}{frac}", &rest[..int_len]).parse().ok()?;
+    Some((if negative { -digits } else { digits }, frac.len(), unit))
+}
+
+/// `value` moved by `steps` units of its last digit, keeping its decimals and
+/// unit; `None` if it isn't one number.
+pub fn nudge(value: &str, steps: i64) -> Option<String> {
+    let (digits, decimals, unit) = parse_number(value)?;
+    let moved = digits.checked_add(steps as i128)?;
+    let abs = format!("{:0>width$}", moved.unsigned_abs(), width = decimals + 1);
+    let (int, frac) = abs.split_at(abs.len() - decimals);
+    let sign = if moved < 0 { "-" } else { "" };
+    Some(if decimals == 0 {
+        format!("{sign}{int}{unit}")
+    } else {
+        format!("{sign}{int}.{frac}{unit}")
+    })
+}
+
+/// The size of one nudge for `value`, such as `1` or `0.01`, if it's a number.
+pub fn nudge_step(value: &str) -> Option<String> {
+    let (_, decimals, _) = parse_number(value)?;
+    Some(match decimals {
+        0 => "1".into(),
+        d => format!("0.{}1", "0".repeat(d - 1)),
+    })
 }
 
 #[cfg(test)]
@@ -727,5 +811,109 @@ mod tests {
         m.mode = InputMode::AttrList { index: 7 };
         press(&mut m, &s, &[KeyCode::Up]);
         assert_eq!(m.mode, InputMode::AttrList { index: 1 });
+    }
+    fn key_with(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent {
+            modifiers,
+            ..key(code)
+        }
+    }
+
+    #[test]
+    fn nudge_steps_the_last_digit_and_keeps_units() {
+        assert_eq!(nudge("20", 1).as_deref(), Some("21"));
+        assert_eq!(nudge("20", -1).as_deref(), Some("19"));
+        assert_eq!(nudge("50px", 1).as_deref(), Some("51px"));
+        assert_eq!(nudge("1.5", 1).as_deref(), Some("1.6"));
+        assert_eq!(nudge("0.264583", 1).as_deref(), Some("0.264584"));
+        assert_eq!(nudge("0.25", -10).as_deref(), Some("0.15"));
+        assert_eq!(nudge("0", -1).as_deref(), Some("-1"));
+        assert_eq!(nudge("-0.1", 1).as_deref(), Some("0.0"));
+        assert_eq!(nudge("-0.1", -1).as_deref(), Some("-0.2"));
+        assert_eq!(nudge("100%", 10).as_deref(), Some("110%"));
+        for not_a_number in [
+            "",
+            "a",
+            "style",
+            "0 0 210 297",
+            "1.",
+            ".5",
+            "fill:#ff0000",
+            "1e3",
+            "-",
+        ] {
+            assert_eq!(nudge(not_a_number, 1), None, "{not_a_number:?}");
+        }
+    }
+
+    const NUMS: &str = r#"<svg xmlns="http://www.w3.org/2000/svg"><rect opacity="0.25" width="50px" x="20" id="r"/></svg>"#;
+
+    fn rect_of(s: &Screen) -> NodeId {
+        let root = super::super::model::root(&s.tree).unwrap();
+        let IdNodeKind::Element { children, .. } = &root.node else {
+            unreachable!()
+        };
+        children[0].id
+    }
+
+    #[test]
+    fn arrows_nudge_a_numeric_attribute() {
+        let s = screen(NUMS);
+        let rect = rect_of(&s);
+        // Canonical order: id, opacity, width, x.
+        let mut m = model_on(&s, rect);
+        press(
+            &mut m,
+            &s,
+            &[KeyCode::Enter, KeyCode::Down, KeyCode::Down, KeyCode::Down],
+        );
+        let cmds = press(&mut m, &s, &[KeyCode::Right]);
+        assert_eq!(
+            cmds.last(),
+            Some(&Command::SetAttr {
+                node: rect,
+                name: "x".into(),
+                value: "21".into()
+            })
+        );
+        assert_eq!(
+            m.mode,
+            InputMode::AttrList { index: 3 },
+            "stays in the list"
+        );
+        let cmds: Vec<Command> = handle(&mut m, &s, key_with(KeyCode::Left, KeyModifiers::SHIFT));
+        assert_eq!(
+            cmds.last(),
+            Some(&Command::SetAttr {
+                node: rect,
+                name: "x".into(),
+                value: "10".into()
+            })
+        );
+        // On `id` the arrows do nothing.
+        let mut m = model_on(&s, rect);
+        let cmds = press(&mut m, &s, &[KeyCode::Enter, KeyCode::Right, KeyCode::Left]);
+        assert!(cmds.is_empty(), "{cmds:?}");
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_anywhere_and_drops_a_half_typed_value() {
+        let s = screen(SVG);
+        let (_, rect, _, _) = ids(&s);
+        let ctrl_c = key_with(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let mut m = model_on(&s, rect);
+        assert!(handle(&mut m, &s, ctrl_c).is_empty());
+        assert!(m.quit, "from browse");
+        let mut m = model_on(&s, rect);
+        press(&mut m, &s, &[KeyCode::Enter]);
+        assert!(handle(&mut m, &s, ctrl_c).is_empty());
+        assert!(m.quit, "from the attribute list");
+        let mut m = model_on(&s, rect);
+        let mut keys = vec![KeyCode::Enter, KeyCode::Enter];
+        keys.extend(typed("blu"));
+        press(&mut m, &s, &keys);
+        assert!(handle(&mut m, &s, ctrl_c).is_empty(), "nothing is sent");
+        assert!(m.quit, "mid-typing");
+        assert_eq!(m.mode, InputMode::Browse);
     }
 }
