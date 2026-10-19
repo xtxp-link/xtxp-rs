@@ -1,8 +1,9 @@
 //! The server in process: screens go straight into the hub, no y-sweet.
 
 use std::net::SocketAddr;
+use std::time::Duration;
 use xmesh::{Op, Xmesh};
-use xtxp_muppet::adapters::serve::{router, Hub, Metrics};
+use xtxp_muppet::adapters::serve::{router_with, Hub, Metrics, Options};
 use xtxp_muppet::ports::Screen;
 
 const LOGO: &str = include_str!("../../xmesh/tests/fixtures/xtxp-logo.svg");
@@ -18,7 +19,13 @@ async fn start() -> Server {
     let metrics = Metrics::new();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr: SocketAddr = listener.local_addr().unwrap();
-    let app = router(hub.clone(), metrics.clone());
+    let app = router_with(
+        hub.clone(),
+        metrics.clone(),
+        Options {
+            heartbeat: Duration::from_millis(50),
+        },
+    );
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     Server {
         hub,
@@ -135,4 +142,106 @@ async fn unknown_live_value_is_400() {
     let (status, _, body) = get(&format!("{}/?live=carrier-pigeon", s.base), None).await;
     assert_eq!(status, 400);
     assert!(body.contains("refresh, stream or ws"), "{body}");
+}
+
+/// Reads the open response until `want` appears in what has arrived, or 3 s pass.
+async fn read_until(resp: &mut reqwest::Response, got: &mut String, want: &str) -> bool {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    while !got.contains(want) {
+        match tokio::time::timeout_at(deadline, resp.chunk()).await {
+            Ok(Ok(Some(c))) => got.push_str(&String::from_utf8_lossy(&c)),
+            _ => return false,
+        }
+    }
+    true
+}
+
+async fn open(url: &str) -> reqwest::Response {
+    let resp = reqwest::Client::new().get(url).send().await.unwrap();
+    assert_eq!(resp.status().as_u16(), 200);
+    resp
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_sends_page_then_patches() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let mut resp = open(&format!("{}/?live=stream", s.base)).await;
+    let mut got = String::new();
+    assert!(
+        read_until(&mut resp, &mut got, "stroke-width=\"9.9\"").await,
+        "{got}"
+    );
+    assert!(!got.contains("</body>"), "the body stays open: {got}");
+    assert!(!got.contains("http-equiv=\"refresh\""), "{got}");
+    widen(&d, "14");
+    s.hub.show(&screen(&d));
+    assert!(
+        read_until(&mut resp, &mut got, "<template for=\"doc\" data-seq=\"2\"").await,
+        "{got}"
+    );
+    assert!(
+        read_until(&mut resp, &mut got, "stroke-width=\"14\"").await,
+        "{got}"
+    );
+    assert_eq!(s.metrics.snapshot().stream.open, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_node_grain_sends_node_templates() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    let mut resp = open(&format!("{}/?live=stream&grain=node", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut resp, &mut got, "</main>").await);
+    widen(&d, "14");
+    s.hub.show(&screen(&d));
+    assert!(
+        read_until(&mut resp, &mut got, "</template>").await,
+        "{got}"
+    );
+    let patch = &got[got.find("<template").unwrap()..];
+    assert!(patch.starts_with("<template for=\"n0-"), "{patch}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stream_skips_patches_older_than_the_page() {
+    let s = start().await;
+    let d = logo();
+    s.hub.show(&screen(&d));
+    widen(&d, "11");
+    s.hub.show(&screen(&d));
+    let mut resp = open(&format!("{}/?live=stream", s.base)).await;
+    let mut got = String::new();
+    assert!(read_until(&mut resp, &mut got, "</main>").await);
+    widen(&d, "12");
+    s.hub.show(&screen(&d));
+    assert!(read_until(&mut resp, &mut got, "</template>").await);
+    assert_eq!(got.matches("<template").count(), 1, "{got}");
+    assert!(got.contains("data-seq=\"3\""), "{got}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn closed_stream_viewer_is_dropped_and_counted() {
+    let s = start().await;
+    s.hub.show(&screen(&logo()));
+    let resp = open(&format!("{}/?live=stream", s.base)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(s.metrics.snapshot().stream.open, 1);
+    drop(resp);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while s.metrics.snapshot().stream.open != 0 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let m = s.metrics.snapshot();
+    assert_eq!((m.stream.open, m.stream.accepted), (0, 1));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn bad_grain_is_400() {
+    let s = start().await;
+    let (status, _, _) = get(&format!("{}/?live=stream&grain=atom", s.base), None).await;
+    assert_eq!(status, 400);
 }

@@ -6,8 +6,8 @@ pub mod metrics;
 pub mod modes;
 
 pub use hub::{Hub, HubView, Snapshot};
-pub use metrics::{Metrics, MetricsSnapshot, Mode};
-pub use modes::{router, Params};
+pub use metrics::{Metrics, MetricsSnapshot, Mode, ModeStats};
+pub use modes::{router, router_with, Options, Params};
 
 use crate::adapters::ws;
 use crate::core::Mode as CoreMode;
