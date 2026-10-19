@@ -64,7 +64,7 @@ async fn page(State(app): State<App>, Query(p): Query<Params>, headers: HeaderMa
         None | Some("refresh") => refresh(&app, &p, &headers),
         Some("stream") => match grain(&p, Grain::Region) {
             Ok(g) => stream(&app, g),
-            Err(r) => r,
+            Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
         },
         Some(_) => (
             StatusCode::BAD_REQUEST,
@@ -123,12 +123,12 @@ fn refresh(app: &App, p: &Params, headers: &HeaderMap) -> Response {
 }
 
 /// The `grain` parameter, or `default`.
-fn grain(p: &Params, default: Grain) -> Result<Grain, Response> {
+fn grain(p: &Params, default: Grain) -> Result<Grain, &'static str> {
     match p.grain.as_deref() {
         None => Ok(default),
         Some("node") => Ok(Grain::Node),
         Some("region") => Ok(Grain::Region),
-        Some(_) => Err((StatusCode::BAD_REQUEST, "grain must be node or region\n").into_response()),
+        Some(_) => Err("grain must be node or region\n"),
     }
 }
 
