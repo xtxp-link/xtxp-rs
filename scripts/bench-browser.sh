@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs bench-browser for every mode and grain at several viewer counts,
-# against a running `xtxp-muppet serve logo` and its y-sweet (as
+# against a running `xtxp-serve logo` and its y-sweet (as
 # `scripts/try-it.sh --browser` starts them). Writes bench-results.csv and
 # bench-results.md. Raise `ulimit -n` first for 1,000 viewers.
 set -euo pipefail

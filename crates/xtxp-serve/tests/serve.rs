@@ -3,8 +3,8 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 use xmesh::{Op, Xmesh};
-use xtxp_muppet::adapters::serve::{router_with, Hub, Metrics, Options};
 use xtxp_muppet::ports::Screen;
+use xtxp_serve::{router_with, Hub, Metrics, Options};
 
 const LOGO: &str = include_str!("../../xmesh/tests/fixtures/xtxp-logo.svg");
 

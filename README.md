@@ -20,7 +20,9 @@ starting with `README.md` there.
 | --- | --- |
 | `crates/xmesh` | The pure core: XML documents on Yrs XML types, canonical form, snapshots, node IDs, test vectors. |
 | `crates/xtxp-wire` | The peer side of the Yjs sync protocol as y-sweet speaks it, as a pure state machine (plus a fake host for tests). |
-| `crates/xtxp-muppet` | The muppet: a terminal UI, one-shot commands, and `serve`, which shows a document to browsers. A pure core behind ports, with tokio, WebSocket and ratatui adapters. |
+| `crates/xtxp-muppet` | The muppet executor: Xmesh embedding, sync, tree, and the one-shot commands (`init`, `edit`, `show`, `replay`). Pure core behind ports, with tokio and WebSocket adapters. |
+| `crates/xtxp-serve` | A browser application on a muppet: serves rendered SVG documents to browsers with live updates in three modes. |
+| `crates/xtxp-tui` | A terminal UI application on a muppet: edits documents interactively with keyboard commands. |
 | `tools/chaos-proxy` | A WebSocket proxy that delays and duplicates frames and drops connections, for the end-to-end tests. |
 | `tools/bench-browser` | Load for `serve`: viewers in each delivery mode and an editor on y-sweet, measuring latency and bandwidth. |
 | `tests/browser` | Playwright tests of `serve` in Chromium 158 (native `<template for>`) and 141 (without). |
@@ -36,13 +38,13 @@ On macOS or Linux, with [Rust](https://rustup.rs) installed:
 scripts/try-it.sh
 ```
 
-It builds y-sweet into `.tools` (once, a few minutes) and the muppet. Then it
+It builds y-sweet into `.tools` (once, a few minutes) and the muppet and apps. Then it
 starts y-sweet on `localhost:8080` with its data in `.ysweet-data`, seeds the
 document `demo` with a blank Inkscape drawing, and prints what to run in two
 more terminals:
 
 ```sh
-target/release/xtxp-muppet open demo
+target/release/xtxp-tui demo
 ```
 
 Edit in one terminal and watch the change arrive in the other. Ctrl-C stops
@@ -53,14 +55,14 @@ The same steps by hand:
 ```sh
 cargo install --git https://github.com/jamsocket/y-sweet \
   --rev 4f1909b2c3390ced54d32b82a673f4f7ee8ac780 y-sweet --root .tools --locked
-cargo build --release -p xtxp-muppet
+cargo build --release -p xtxp-muppet -p xtxp-tui
 .tools/bin/y-sweet serve .ysweet-data --port 8080 --skip-gc --checkpoint-freq-seconds 1
 # in another terminal:
 target/release/xtxp-muppet init crates/xmesh/tests/fixtures/inkscape-blank.svg --doc demo
-target/release/xtxp-muppet open demo
+target/release/xtxp-tui demo
 ```
 
-In `open`:
+In `xtxp-tui`:
 - **↑ ↓** move;
 - **← →** fold and unfold;
 - **Enter** edits a text node, or lists an element's attributes: Enter edits one, **← →** nudge a numeric one by its last digit (Shift for ×10), Backspace or Delete removes one, and the last row, `+ add attribute`, adds one (as does `a`);
@@ -70,7 +72,7 @@ In `open`:
 - **m** marks a node to move, then **m** on its new parent;
 - **q** or **Ctrl-C** quits.
 
-`open --read-only` watches without editing.
+`xtxp-tui --read-only` watches without editing.
 
 The one-shot commands print JSON or XML and exit, for scripts and tests:
 
@@ -93,7 +95,7 @@ M2-y-sweet's first part shows a document live in a browser, watch-only for now:
 scripts/try-it.sh --browser
 ```
 
-It also seeds the XTXP logo as `logo` and runs `xtxp-muppet serve logo` on `localhost:3000`. Edit the logo with `target/release/xtxp-muppet open logo` and watch the browser. The same drawing comes in three ways:
+It also seeds the XTXP logo as `logo` and runs `xtxp-serve logo` on `localhost:3000`. Edit the logo with `target/release/xtxp-tui logo` and watch the browser. The same drawing comes in three ways:
 
 | URL | How changes arrive | JavaScript |
 | --- | --- | --- |

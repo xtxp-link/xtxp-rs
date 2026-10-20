@@ -299,7 +299,7 @@ fn stream(app: &App, grain: Grain, polyfill: bool, measure: bool) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::Screen;
+    use xtxp_muppet::ports::Screen;
     use xmesh::{Op, Xmesh};
 
     #[tokio::test]
@@ -309,7 +309,7 @@ mod tests {
         let d = Xmesh::new(7).unwrap();
         d.apply(
             &Xmesh::seed(include_str!(
-                "../../../../xmesh/tests/fixtures/xtxp-logo.svg"
+                "../../../xmesh/tests/fixtures/xtxp-logo.svg"
             ))
             .unwrap(),
         )

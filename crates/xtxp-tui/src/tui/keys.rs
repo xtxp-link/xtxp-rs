@@ -406,7 +406,8 @@ pub fn nudge_step(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Command;
+    use xtxp_muppet::core::Command;
+    use xtxp_muppet::ports::Screen;
     use ratatui::crossterm::event::{KeyEventKind, KeyEventState, KeyModifiers};
     use xmesh::{IdNode, IdNodeKind, NodeId, Xmesh};
 
