@@ -153,10 +153,31 @@ impl Orbit {
     }
 
     /// Update node IDs from the current screen (call when you receive a new screen).
-    pub fn sync_node_ids(&mut self, _screen: &Screen) {
-        // Find node IDs for the three bodies by their paths.
-        // For now, this is a stub; in a real app, you'd search the tree by path.
-        // Bodies are at paths: "2/1" (left), "2/0" (cross), "2/2" (right).
+    pub fn sync_node_ids(&mut self, screen: &Screen) {
+        // Find node IDs for the three bodies: path 2/1, 2/0, 2/2.
+        // Walk the tree to find these elements.
+        fn find_at_path(tree: &[xmesh::IdNode], path: &[usize]) -> Option<xmesh::NodeId> {
+            if path.is_empty() {
+                return None;
+            }
+            if path.len() == 1 {
+                return tree.get(path[0]).map(|n| n.id);
+            }
+            match tree.get(path[0]).map(|n| &n.node) {
+                Some(xmesh::IdNodeKind::Element { children, .. }) => {
+                    find_at_path(children, &path[1..])
+                }
+                _ => None,
+            }
+        }
+
+        self.node_ids[0] = find_at_path(&screen.tree, &[2, 1]); // left X
+        self.node_ids[1] = find_at_path(&screen.tree, &[2, 0]); // cross
+        self.node_ids[2] = find_at_path(&screen.tree, &[2, 2]); // right X
+
+        if self.node_ids[0].is_some() && self.node_ids[1].is_some() && self.node_ids[2].is_some() {
+            self.status = "orbit: found all three bodies".into();
+        }
     }
 
     /// Run the orbit engine: step physics, and periodically send render commands.
@@ -196,8 +217,9 @@ impl Orbit {
 }
 
 impl View for Orbit {
-    fn show(&mut self, _: &Screen) {
-        // The orbit engine doesn't show state; it only commands.
+    fn show(&mut self, screen: &Screen) {
+        // Sync node IDs when we get a new screen from the muppet.
+        self.sync_node_ids(screen);
     }
 
     fn status(&mut self, line: &str) {

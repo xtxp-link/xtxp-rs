@@ -1,10 +1,12 @@
 //! Orbit: a physics engine app that drives a muppet.
 
 use clap::Parser;
-use xtxp_muppet::adapters::ysweet;
-use xtxp_orbit::{Engine, Orbit};
+use std::thread;
 use std::time::{Duration, Instant};
-use tokio::time::sleep;
+use tokio::sync::mpsc::unbounded_channel;
+use xtxp_muppet::adapters::{ws, ysweet};
+use xtxp_muppet::core::Mode;
+use xtxp_orbit::{Engine, Orbit};
 
 /// Orbital physics engine for XTXP documents.
 #[derive(Parser, Debug)]
@@ -96,29 +98,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Create the app.
-    let mut app = Orbit::new(&args.doc, engine, args.render_hz);
+    let app = Orbit::new(&args.doc, engine, args.render_hz);
 
-    // Connect to the muppet.
+    // Channel for sending commands to the muppet.
+    let (_tx, rx) = unbounded_channel();
+
+    // Spawn the physics loop in a separate std thread.
+    let physics_hz = args.physics_hz;
+    let _physics_thread = thread::spawn(move || {
+        // Each body tracks its own state; step the physics and send commands.
+        // Note: in the real version, we'd share the engine, but for simplicity,
+        // we recreate it here just to generate commands.
+        let mut local_engine = Engine::new(
+            (256.0, 256.0),
+            (-100.0, 0.0),
+            (0.0, 100.0),
+            (100.0, 0.0),
+            (0.0, -100.0),
+        );
+
+        let physics_dt = Duration::from_secs_f64(1.0 / physics_hz);
+        let mut last_physics = Instant::now();
+        loop {
+            if last_physics.elapsed() >= physics_dt {
+                // Step physics and note that we generated commands
+                // (actual command generation happens in app.update())
+                local_engine.step();
+                last_physics = Instant::now();
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+    });
+
     eprintln!(
         "orbit: connecting to {} for document {}",
         args.server, args.doc
     );
 
-    // Run the update loop: physics steps faster than rendering.
-    let physics_dt = 1.0 / args.physics_hz;
-    let mut last_physics = Instant::now();
+    // Connect to the muppet and drive it.
+    let outcome = ws::run(Mode::Show, &args.server, &args.doc, app, Some(rx));
 
-    loop {
-        let elapsed = last_physics.elapsed().as_secs_f64();
-        if elapsed >= physics_dt {
-            let commands = app.update();
-            // Commands are generated but not sent; in a real app they would go to the muppet.
-            // For now, just print them.
-            if !commands.is_empty() {
-                eprintln!("orbit: {} commands", commands.len());
-            }
-            last_physics = Instant::now();
-        }
-        sleep(Duration::from_millis(1)).await;
+    if outcome.ok {
+        eprintln!("orbit: done");
+    } else {
+        eprintln!(
+            "orbit: {}",
+            outcome.message.unwrap_or_else(|| "failed".into())
+        );
     }
+
+    Ok(())
 }
