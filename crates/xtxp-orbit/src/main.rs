@@ -1,12 +1,29 @@
 //! Orbit: a physics engine app that drives a muppet.
 
 use clap::Parser;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::unbounded_channel;
 use xtxp_muppet::adapters::{ws, ysweet};
 use xtxp_muppet::core::Mode;
+use xtxp_muppet::ports::{Outcome, Screen, View};
 use xtxp_orbit::{Engine, Orbit};
+
+/// Wrapper that allows Orbit to be shared across threads via Arc<Mutex<>>.
+struct SharedOrbit(Arc<Mutex<Orbit>>);
+
+impl View for SharedOrbit {
+    fn show(&mut self, screen: &Screen) {
+        self.0.lock().unwrap().show(screen);
+    }
+    fn status(&mut self, line: &str) {
+        self.0.lock().unwrap().status(line);
+    }
+    fn finished(&mut self, outcome: &Outcome) {
+        self.0.lock().unwrap().finished(outcome);
+    }
+}
 
 /// Orbital physics engine for XTXP documents.
 #[derive(Parser, Debug)]
@@ -97,33 +114,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (right_vel_x, right_vel_y),
     );
 
-    // Create the app.
-    let app = Orbit::new(&args.doc, engine, args.render_hz);
+    // Create the app in Arc<Mutex<>> to share between physics thread and muppet.
+    let app = Arc::new(Mutex::new(Orbit::new(&args.doc, engine, args.render_hz)));
 
     // Channel for sending commands to the muppet.
     let (_tx, rx) = unbounded_channel();
 
-    // Spawn the physics loop in a separate std thread.
+    // Spawn the physics loop in a separate std thread that updates the shared app.
+    let app_clone = Arc::clone(&app);
     let physics_hz = args.physics_hz;
     let _physics_thread = thread::spawn(move || {
-        // Each body tracks its own state; step the physics and send commands.
-        // Note: in the real version, we'd share the engine, but for simplicity,
-        // we recreate it here just to generate commands.
-        let mut local_engine = Engine::new(
-            (256.0, 256.0),
-            (-100.0, 0.0),
-            (0.0, 100.0),
-            (100.0, 0.0),
-            (0.0, -100.0),
-        );
-
         let physics_dt = Duration::from_secs_f64(1.0 / physics_hz);
         let mut last_physics = Instant::now();
         loop {
             if last_physics.elapsed() >= physics_dt {
-                // Step physics and note that we generated commands
-                // (actual command generation happens in app.update())
-                local_engine.step();
+                // Lock the app, step physics, and generate commands.
+                let commands = app_clone.lock().unwrap().update();
+                // Commands are sent through the channel to the muppet.
+                if !commands.is_empty() {
+                    eprintln!("orbit: {} commands", commands.len());
+                }
                 last_physics = Instant::now();
             }
             thread::sleep(Duration::from_millis(1));
@@ -137,8 +147,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to the muppet and drive it (blocking call in a blocking task).
     // Use Mode::Interactive to keep the connection open and process commands continuously.
+    // SharedOrbit wraps the Arc<Mutex<Orbit>> so it can be passed to ws::run.
     let outcome = tokio::task::block_in_place(|| {
-        ws::run(Mode::Interactive, &args.server, &args.doc, app, Some(rx))
+        ws::run(Mode::Interactive, &args.server, &args.doc, SharedOrbit(app), Some(rx))
     });
 
     if outcome.ok {
