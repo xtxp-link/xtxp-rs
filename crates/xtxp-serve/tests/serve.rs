@@ -253,7 +253,7 @@ async fn ws_page_loads_live_js() {
     let (status, _, body) = get(&format!("{}/?live=ws", s.base), None).await;
     assert_eq!(status, 200);
     assert!(
-        body.contains("<script src=\"/live.js\" data-mode=\"ws\" data-grain=\"node\""),
+        body.contains("<script src=\"live.js\" data-mode=\"ws\" data-grain=\"node\""),
         "{body}"
     );
     assert!(
@@ -312,7 +312,7 @@ async fn stream_polyfill_flag_adds_the_script() {
         read_until(
             &mut resp,
             &mut got,
-            "<script src=\"/live.js\" data-mode=\"stream\" data-grain=\"region\"></script>"
+            "<script src=\"live.js\" data-mode=\"stream\" data-grain=\"region\"></script>"
         )
         .await,
         "{got}"
@@ -359,7 +359,7 @@ async fn bare_root_has_noscript_refresh_and_picker() {
         body.contains("location.replace") && body.contains("parseHTMLUnsafe"),
         "{body}"
     );
-    assert!(body.contains("/live.js"), "{body}");
+    assert!(body.contains("'live.js'"), "{body}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -367,7 +367,7 @@ async fn metrics_flag_adds_the_script() {
     let s = start().await;
     let (_, _, body) = get(&format!("{}/?live=ws&metrics=1", s.base), None).await;
     assert!(
-        body.contains("<script src=\"/metrics.js\"></script>"),
+        body.contains("<script src=\"metrics.js\"></script>"),
         "{body}"
     );
     let (_, _, plain) = get(&format!("{}/?live=ws", s.base), None).await;

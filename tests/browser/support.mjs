@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
 const muppet = process.env.XTXP_MUPPET ?? `${root}/target/release/xtxp-muppet`;
-const serve = process.env.XTXP_SERVE ?? `${root}/target/release/xtxp-serve`;
+const serveBin = process.env.XTXP_SERVE ?? `${root}/target/release/xtxp-serve`;
 const ysweet = process.env.YSWEET_BIN ?? `${root}/.tools/bin/y-sweet`;
 const LOGO = `${root}/crates/xmesh/tests/fixtures/xtxp-logo.svg`;
 
@@ -49,7 +49,7 @@ export async function startStack() {
   const base = `http://127.0.0.1:${webPort}`;
   const log = process.env.SERVE_LOG ? (await import('node:fs')).openSync(process.env.SERVE_LOG, 'a') : 'ignore';
   const startServe = () =>
-    spawn(serve, ['logo', '--server', server, '--listen', `127.0.0.1:${webPort}`], { stdio: ['ignore', 'ignore', log] });
+    spawn(serveBin, ['logo', '--server', server, '--listen', `127.0.0.1:${webPort}`], { stdio: ['ignore', 'ignore', log] });
   const live = () =>
     until('serve', async () => (await (await fetch(`${base}/?live=refresh`)).text()).includes('● live'));
   let serve = startServe();

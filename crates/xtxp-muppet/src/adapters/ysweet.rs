@@ -1,12 +1,27 @@
-//! Talking to y-sweet v0.9.1 with no auth (P2).
+//! Talking to y-sweet v0.9.1 with no auth (P2), or to anything that speaks
+//! its protocol, such as `xtxp-worker`.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::Arc;
 use std::time::Duration;
+
+/// A server address: `host:port` or `http://host:port` in the clear, or
+/// `https://host` over TLS (port 443 unless given), for a deployed Worker.
+fn parse_server(server: &str) -> (bool, &str) {
+    let server = server.trim_end_matches('/');
+    if let Some(rest) = server.strip_prefix("https://") {
+        (true, rest)
+    } else {
+        (false, server.strip_prefix("http://").unwrap_or(server))
+    }
+}
 
 /// The WebSocket URL of a document.
 pub fn ws_url(server: &str, doc: &str) -> String {
-    format!("ws://{server}/d/{doc}/ws/{doc}")
+    let (tls, authority) = parse_server(server);
+    let scheme = if tls { "wss" } else { "ws" };
+    format!("{scheme}://{authority}/d/{doc}/ws/{doc}")
 }
 
 /// y-sweet's own rule: ASCII letters, digits, `-` and `_`, not empty.
@@ -31,24 +46,53 @@ pub fn check_doc(name: &str) -> Result<(), String> {
 
 /// `POST /doc/new {"docId": name}`: creates the document, or finds it.
 pub fn create_doc(server: &str, name: &str) -> Result<(), String> {
+    let (tls, authority) = parse_server(server);
     let body = format!("{{\"docId\":\"{name}\"}}");
+    let host = authority.split(':').next().unwrap_or(authority);
     let request = format!(
-        "POST /doc/new HTTP/1.1\r\nhost: {server}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        "POST /doc/new HTTP/1.1\r\nhost: {authority}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
     );
     let unreachable = |e: std::io::Error| format!("could not reach y-sweet at {server}: {e}");
-    let mut sock = TcpStream::connect(server).map_err(unreachable)?;
+    let addr = if authority.contains(':') || !tls {
+        authority.to_string()
+    } else {
+        format!("{authority}:443")
+    };
+    let sock = TcpStream::connect(&addr).map_err(unreachable)?;
     sock.set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(unreachable)?;
-    sock.write_all(request.as_bytes()).map_err(unreachable)?;
     let mut response = String::new();
-    let _ = sock.read_to_string(&mut response);
+    if tls {
+        let mut stream = rustls::StreamOwned::new(tls_client(host)?, sock);
+        stream.write_all(request.as_bytes()).map_err(unreachable)?;
+        let _ = stream.read_to_string(&mut response);
+    } else {
+        let mut sock = sock;
+        sock.write_all(request.as_bytes()).map_err(unreachable)?;
+        let _ = sock.read_to_string(&mut response);
+    }
     let status = response.split_whitespace().nth(1).unwrap_or("");
     if status == "200" {
         Ok(())
     } else {
         Err(format!("y-sweet refused to create {name:?}: HTTP {status}"))
     }
+}
+
+/// A TLS client for `host` that trusts the system's certificates, as the
+/// WebSocket's does.
+fn tls_client(host: &str) -> Result<rustls::ClientConnection, String> {
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in rustls_native_certs::load_native_certs().certs {
+        let _ = roots.add(cert);
+    }
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    let name = rustls::pki_types::ServerName::try_from(host.to_string())
+        .map_err(|e| format!("{host:?} isn't a server name: {e}"))?;
+    rustls::ClientConnection::new(Arc::new(config), name).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -61,6 +105,18 @@ mod tests {
         assert_eq!(
             ws_url("localhost:8080", "demo"),
             "ws://localhost:8080/d/demo/ws/demo"
+        );
+    }
+
+    #[test]
+    fn ws_url_over_tls() {
+        assert_eq!(
+            ws_url("https://xtxp.example.workers.dev/", "logo"),
+            "wss://xtxp.example.workers.dev/d/logo/ws/logo"
+        );
+        assert_eq!(
+            ws_url("http://127.0.0.1:8787", "logo"),
+            "ws://127.0.0.1:8787/d/logo/ws/logo"
         );
     }
 

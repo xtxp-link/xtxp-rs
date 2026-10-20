@@ -25,6 +25,7 @@ starting with `README.md` there.
 | `crates/xtxp-muppet` | The muppet executor: Xmesh embedding, sync, tree, and the one-shot commands (`init`, `edit`, `show`, `replay`). Pure core behind ports, with tokio and WebSocket adapters. |
 | `crates/xtxp-serve` | A browser application on a muppet: serves rendered SVG documents to browsers with live updates in three modes. |
 | `crates/xtxp-tui` | A terminal UI application on a muppet: edits documents interactively with keyboard commands. |
+| `crates/xtxp-worker` | A host and browser server on a Cloudflare Worker, compiled to wasm: one Durable Object per document speaks y-sweet's protocol to muppets and serves `xtxp-serve`'s pages to browsers. Its own workspace. |
 | `crates/xtxp-orbit` | An application that owns a space: a three-body physics engine that moves and spins the logo's parts, publishing their transforms through a muppet. |
 | `tools/chaos-proxy` | A WebSocket proxy that delays and duplicates frames and drops connections, for the end-to-end tests. |
 | `tools/bench-browser` | Load for `serve`: viewers in each delivery mode and an editor on y-sweet, measuring latency and bandwidth. |
@@ -123,6 +124,47 @@ target/release/xtxp-orbit logo
 
 The cross is a heavy body at its place in the logo. The two outer X's start on a circular orbit about it, one moving up and one down, and spin about their own centres. The physics steps at a fixed 240 Hz and the transforms are published at 30 Hz (`--physics-hz`, `--render-hz`). `--help` lists the masses, gravity, start positions and velocities, and `--left-spin`, `--cross-spin` and `--right-spin` (degrees per second). Ctrl-C leaves the logo where it stopped; `scripts/try-it.sh --reset --browser` puts it back.
 
+## On a Cloudflare Worker
+
+`crates/xtxp-worker` is the host and the browser server in one, compiled to
+wasm for a Cloudflare Worker. Each document is a Durable Object that speaks
+y-sweet's protocol, so `xtxp-tui`, `xtxp-orbit` and `xtxp-muppet` connect
+to it unchanged, and renders the document for any number of browsers in the
+same three modes as `xtxp-serve`, under `/d/{doc}/`. To run it locally, in
+Cloudflare's own runtime and with no account:
+
+```sh
+scripts/try-worker.sh
+```
+
+It needs Node 22 or later as well as Rust. It seeds the logo and prints the
+URLs; drive it with `--server 127.0.0.1:8787`.
+
+To put it on the Workers free plan, from `crates/xtxp-worker`:
+
+```sh
+npx wrangler login
+npx wrangler deploy        # prints https://xtxp.<your-subdomain>.workers.dev
+```
+
+then point the muppets at it with `--server https://xtxp.<your-subdomain>.workers.dev`
+and open `https://xtxp.<your-subdomain>.workers.dev/d/logo/` in browsers.
+
+What the free plan means for it:
+
+- A document stays in memory while anyone is connected and is written to
+  storage at most every 2 seconds, so a muppet editing at 30 Hz costs about
+  one row write per 2 s, not 30 a second.
+- Its WebSockets aren't hibernatable yet, so a document with someone connected
+  counts duration the whole time: roughly a day of one document's connected
+  time fits in the free daily allowance.
+- Muppet frames count as requests, 20 to one: `xtxp-orbit` at its default
+  30 Hz uses about 5,400 of the 100,000 daily requests an hour.
+  `--render-hz 10` stretches that. Browsers on `?live=refresh` cost a request
+  a second each; streams and WebSocket viewers cost one when they open.
+- There's no auth, as with y-sweet here (P2): anyone with the URL can edit.
+- `?metrics=1` isn't served yet.
+
 ## Tests
 
 ```sh
@@ -134,6 +176,8 @@ cargo test --release -p xtxp-muppet --test e2e
 cargo test --release -p bench-browser          # a smoke run of every mode
 scripts/fetch-chromium.sh                     # Chromium 158, once
 (cd tests/browser && npm ci && npx playwright test)
+(cd crates/xtxp-worker && npm ci && npx wrangler dev) &   # then:
+node tests/worker/smoke.mjs
 ```
 
 The end-to-end tests start real y-sweet servers behind the chaos proxy and

@@ -71,3 +71,33 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           npx playwright test
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/xtxp-worker
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: crates/xtxp-worker
+        run: |
+          cargo fmt --check
+          cargo clippy --target wasm32-unknown-unknown -- -D warnings
+          cargo test
+          npm ci
+      - run: cargo build --release -p xtxp-muppet
+      # wrangler builds the Worker with worker-build and runs it in workerd, locally.
+      - working-directory: crates/xtxp-worker
+        run: npx wrangler dev --port 8787 --ip 127.0.0.1 > wrangler.log 2>&1 &
+      - run: node tests/worker/smoke.mjs
+      - if: failure()
+        run: cat crates/xtxp-worker/wrangler.log

@@ -8,7 +8,7 @@ description = "The XTXP muppet: the executor of the protocol."
 [features]
 default = ["adapters"]
 # The muppet's adapters: implementations of ports that touch the network and clock.
-adapters = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json"]
+adapters = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json", "dep:rustls", "dep:rustls-native-certs"]
 
 [[bin]]
 name = "xtxp-muppet"
@@ -27,7 +27,10 @@ required-features = ["adapters"]
 xmesh = { path = "../xmesh" }
 xtxp-wire = { path = "../xtxp-wire" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync", "io-util", "signal"], optional = true }
-tokio-tungstenite = { version = "0.30", optional = true }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"], optional = true }
+# TLS for `--server https://...`, such as a deployed xtxp-worker.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"], optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 rand = { workspace = true, optional = true }

@@ -1,10 +1,16 @@
 //! The peer side of a muppet's conversation with a host, over one
 //! connection: the Yjs sync protocol as y-sweet v0.9.1 speaks it, as a pure
 //! state machine. No I/O, no clock, no threads, no randomness: the caller
-//! moves frames and supplies client IDs. Merging is Xmesh's job.
+//! moves frames and supplies client IDs. Merging is Xmesh's job. The host's
+//! side of the same conversation is [`host`].
 
+pub mod host;
+
+/// The tests' name for [`host::Host`]: an in-process y-sweet.
 #[cfg(feature = "fake-host")]
-pub mod fake_host;
+pub mod fake_host {
+    pub use crate::host::{ConnId, Host as FakeHost};
+}
 
 use xmesh::{Op, Xmesh};
 use yrs::sync::Message;
@@ -374,6 +380,24 @@ mod tests {
         assert!(net.events[b]
             .iter()
             .any(|e| matches!(e, Event::RemoteUpdate { .. })));
+    }
+
+    #[test]
+    fn a_reloaded_host_serves_what_it_saved() {
+        let mut net = Net::new();
+        let a = net.add(1);
+        net.connect(a);
+        assert!(!net.host.take_changed());
+        net.seed(a);
+        net.edit(a, set_fill(vec![0], "red"));
+        assert!(net.host.take_changed());
+        assert!(!net.host.take_changed());
+        let saved = net.host.state();
+        net.host = FakeHost::load(&saved).unwrap();
+        assert_eq!(net.host.doc_hash(), net.peers[a].0.doc().hash());
+        let late = net.add(3);
+        net.connect(late);
+        assert_eq!(net.peers[late].0.doc().hash(), net.peers[a].0.doc().hash());
     }
 
     #[test]

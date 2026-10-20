@@ -55,7 +55,7 @@
 
   function flush() {
     if (!batch.length && !jank) return;
-    navigator.sendBeacon('/metrics/client', JSON.stringify({ mode, grain, samples: batch, jank }));
+    navigator.sendBeacon('metrics/client', JSON.stringify({ mode, grain, samples: batch, jank }));
     batch = [];
     jank = 0;
   }

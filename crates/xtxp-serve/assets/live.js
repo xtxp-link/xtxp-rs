@@ -106,8 +106,10 @@
   // reconnect misses nothing.
   let backoff = 100;
   function connect() {
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${scheme}://${location.host}/live?grain=${grain}`);
+    // Relative to the page, which may be under a document's path.
+    const url = new URL(`live?grain=${grain}`, location.href);
+    url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(url);
     ws.onopen = () => {
       live.connected = true;
       backoff = 100;
