@@ -1,4 +1,4 @@
-//! Each mode against a real y-sweet and an in-process `serve`.
+//! Each mode against a real y-sweet and an in-process serve app.
 
 use bench_browser::{run, Config, Mode};
 use std::net::TcpListener;
@@ -7,6 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use xtxp_muppet::core::Mode as CoreMode;
 use xtxp_muppet::ports::{Outcome, Screen, View};
+use xtxp_serve;
 
 const LOGO: &str = include_str!("../../../crates/xmesh/tests/fixtures/xtxp-logo.svg");
 
@@ -75,12 +76,12 @@ fn smoke_each_mode() {
     let out = xtxp_muppet::adapters::ws::run(CoreMode::Init { seed }, &ysweet, "logo", Quiet, None);
     assert!(out.ok, "{out:?}");
 
-    let (hub, metrics) = xtxp_muppet::adapters::serve::start(&ysweet, "logo");
+    let (hub, metrics) = xtxp_serve::start(&ysweet, "logo");
     let rt = tokio::runtime::Runtime::new().unwrap();
     let url = rt.block_on(async {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let app = xtxp_muppet::adapters::serve::router(hub, metrics);
+        let app = xtxp_serve::router(hub, metrics);
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         format!("http://{addr}")
     });

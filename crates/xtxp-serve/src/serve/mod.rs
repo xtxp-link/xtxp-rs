@@ -1,5 +1,5 @@
-//! `serve`: a server-side muppet that watches one document on y-sweet and
-//! shows it to browsers, by refresh, by an open response, or over a WebSocket.
+//! `serve`: serves a y-sweet document to browsers in three delivery modes
+//! (refresh, stream, WebSocket). The server-side app that owns the browser view.
 
 pub mod hub;
 pub mod metrics;
@@ -9,8 +9,8 @@ pub use hub::{Hub, HubView, Snapshot};
 pub use metrics::{Metrics, MetricsSnapshot, Mode, ModeStats};
 pub use modes::{router, router_with, Options, Params};
 
-use crate::adapters::ws;
-use crate::core::Mode as CoreMode;
+use xtxp_muppet::adapters::ws;
+use xtxp_muppet::core::Mode as CoreMode;
 use std::net::SocketAddr;
 
 /// Starts watching `doc` on y-sweet at `server`: the watch-only core on its

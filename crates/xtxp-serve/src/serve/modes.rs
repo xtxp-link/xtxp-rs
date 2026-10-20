@@ -350,7 +350,7 @@ mod tests {
     }
 }
 
-const LIVE_JS: &str = include_str!("../../../assets/live.js");
+const LIVE_JS: &str = include_str!("../../assets/live.js");
 
 fn grain_name(grain: Grain) -> &'static str {
     match grain {
@@ -443,7 +443,7 @@ async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebS
     }
 }
 
-const METRICS_JS: &str = include_str!("../../../assets/metrics.js");
+const METRICS_JS: &str = include_str!("../../assets/metrics.js");
 
 /// Picks a mode for a browser with JavaScript: the patch stream where
 /// `<template for>` works natively, the WebSocket polyfill otherwise.

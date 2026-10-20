@@ -1,0 +1,30 @@
+[package]
+name = "xtxp-serve"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "A muppet app: serves a y-sweet document to browsers in three delivery modes."
+publish = false
+
+[[bin]]
+name = "xtxp-serve"
+path = "src/main.rs"
+
+[dependencies]
+xmesh = { path = "../xmesh" }
+xtxp-muppet = { path = "../xtxp-muppet", features = ["adapters"] }
+xtxp-wire = { path = "../xtxp-wire" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros", "sync"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+axum = { version = "0.8", features = ["ws"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }
+rand.workspace = true
+libc = "0.2"
+
+[dev-dependencies]
+xtxp-wire = { path = "../xtxp-wire", features = ["fake-host"] }
+chaos-proxy = { path = "../../tools/chaos-proxy" }
+reqwest = { version = "0.12", default-features = false }

@@ -220,7 +220,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.30.0",
  "xmesh",
- "xtxp-muppet",
+ "xtxp-serve",
  "xtxp-wire",
 ]
 
@@ -2876,7 +2876,6 @@ dependencies = [
 name = "xtxp-muppet"
 version = "0.0.1"
 dependencies = [
- "axum",
  "chaos-proxy",
  "clap",
  "futures-util",
@@ -2890,6 +2889,26 @@ dependencies = [
  "tokio-tungstenite 0.30.0",
  "xmesh",
  "xtxp-fuzzer",
+ "xtxp-wire",
+]
+
+[[package]]
+name = "xtxp-serve"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "chaos-proxy",
+ "clap",
+ "futures-util",
+ "libc",
+ "rand 0.8.8",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "xmesh",
+ "xtxp-muppet",
  "xtxp-wire",
 ]
 

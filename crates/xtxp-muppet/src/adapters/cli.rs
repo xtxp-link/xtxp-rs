@@ -43,12 +43,6 @@ pub enum Sub {
         #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
         ops: Vec<String>,
     },
-    /// Serve a document to browsers: refresh, stream or WebSocket (`?live=`).
-    Serve {
-        doc: String,
-        #[arg(long, default_value = "127.0.0.1:3000")]
-        listen: std::net::SocketAddr,
-    },
     /// Sync, print and exit.
     Show {
         doc: String,
@@ -275,10 +269,6 @@ fn run(cli: Cli) -> Result<(), String> {
             );
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
-        }
-        Sub::Serve { doc, listen } => {
-            check_doc(&doc)?;
-            crate::adapters::serve::run(&server, &doc, listen)?
         }
         Sub::Open { doc, read_only } => {
             check_doc(&doc)?;

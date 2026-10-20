@@ -3,12 +3,12 @@ name = "xtxp-muppet"
 version = "0.0.1"
 edition.workspace = true
 license.workspace = true
-description = "A local muppet: Xmesh plus xtxp-wire, with a TUI and one-shot commands."
+description = "The XTXP muppet: the executor of the protocol."
 
 [features]
 default = ["adapters"]
-# The binary's adapters: terminal, network, clock, randomness. The core builds without them.
-adapters = ["dep:ratatui", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json", "dep:axum", "dep:libc", "dep:serde"]
+# The muppet's adapters: implementations of ports that touch the network and clock.
+adapters = ["dep:ratatui", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json", "dep:libc", "dep:serde"]
 
 [[bin]]
 name = "xtxp-muppet"
@@ -23,10 +23,6 @@ required-features = ["adapters"]
 name = "e2e"
 required-features = ["adapters"]
 
-[[test]]
-name = "serve"
-required-features = ["adapters"]
-
 [dependencies]
 xmesh = { path = "../xmesh" }
 xtxp-wire = { path = "../xtxp-wire" }
@@ -37,7 +33,6 @@ clap = { version = "4", features = ["derive"], optional = true }
 rand = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 ratatui = { version = "0.30", optional = true }
-axum = { version = "0.8", features = ["ws"], optional = true }
 libc = { version = "0.2", optional = true }
 serde = { workspace = true, optional = true }
 
