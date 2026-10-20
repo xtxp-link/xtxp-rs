@@ -1,4 +1,4 @@
-//! `bench-browser`: one run against `xtxp-muppet serve`, appended to a CSV.
+//! `bench-browser`: one run against `xtxp-serve`, appended to a CSV.
 
 use bench_browser::report::{markdown, Row, CSV_HEADER};
 use bench_browser::{run, Config, Mode};
@@ -14,7 +14,7 @@ enum ModeArg {
     Ws,
 }
 
-/// Load for `xtxp-muppet serve`: N viewers in one mode, an editor on y-sweet.
+/// Load for `xtxp-serve`: N viewers in one mode, an editor on y-sweet.
 #[derive(Debug, Parser)]
 #[command(name = "bench-browser")]
 struct Args {

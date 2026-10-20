@@ -23,6 +23,7 @@ starting with `README.md` there.
 | `crates/xtxp-muppet` | The muppet executor: Xmesh embedding, sync, tree, and the one-shot commands (`init`, `edit`, `show`, `replay`). Pure core behind ports, with tokio and WebSocket adapters. |
 | `crates/xtxp-serve` | A browser application on a muppet: serves rendered SVG documents to browsers with live updates in three modes. |
 | `crates/xtxp-tui` | A terminal UI application on a muppet: edits documents interactively with keyboard commands. |
+| `crates/xtxp-orbit` | An application that owns a space: a three-body physics engine that moves and spins the logo's parts, publishing their transforms through a muppet. |
 | `tools/chaos-proxy` | A WebSocket proxy that delays and duplicates frames and drops connections, for the end-to-end tests. |
 | `tools/bench-browser` | Load for `serve`: viewers in each delivery mode and an editor on y-sweet, measuring latency and bandwidth. |
 | `tests/browser` | Playwright tests of `serve` in Chromium 158 (native `<template for>`) and 141 (without). |
@@ -108,6 +109,17 @@ It also seeds the XTXP logo as `logo` and runs `xtxp-serve logo` on `localhost:3
 To measure, add `&metrics=1` (latency and view-transition time in an overlay, sent to the server) and read `http://localhost:3000/metrics`. `tools/bench-browser` puts load on it: N viewers in one mode and an editor on y-sweet, reporting latency, bandwidth and server CPU. `scripts/bench-browser.sh` runs every mode at 1 to 1,000 viewers. What the browsers did is in [`docs/reports/m2-y-sweet-browser-probes.md`](docs/reports/m2-y-sweet-browser-probes.md).
 
 `--reset` deletes the stored documents first (after asking), so they're seeded fresh.
+
+## Physics
+
+With `scripts/try-it.sh --browser` running, `xtxp-orbit` animates the logo:
+
+```sh
+cargo build --release -p xtxp-orbit
+target/release/xtxp-orbit logo
+```
+
+The cross is a heavy body at its place in the logo. The two outer X's start on a circular orbit about it, one moving up and one down, and spin about their own centres. The physics steps at a fixed 240 Hz and the transforms are published at 30 Hz (`--physics-hz`, `--render-hz`). `--help` lists the masses, gravity, start positions and velocities, and `--left-spin`, `--cross-spin` and `--right-spin` (degrees per second). Ctrl-C leaves the logo where it stopped; `scripts/try-it.sh --reset --browser` puts it back.
 
 ## Tests
 

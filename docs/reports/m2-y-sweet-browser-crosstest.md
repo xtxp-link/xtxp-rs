@@ -10,7 +10,7 @@
 - [x] try-it.sh --browser run successfully
 - [x] y-sweet on localhost:8080
 - [x] Logo served on localhost:3000
-- [ ] Editor opened with `target/release/xtxp-muppet open logo`
+- [ ] Editor opened with `target/release/xtxp-tui logo`
 - [ ] Chrome version recorded
 
 ### URLs Available

@@ -2882,7 +2882,6 @@ dependencies = [
  "futures-util",
  "rand 0.8.8",
  "reqwest",
- "serde",
  "serde_json",
  "tokio",
  "tokio-tungstenite 0.30.0",
@@ -2910,7 +2909,6 @@ dependencies = [
  "clap",
  "futures-util",
  "libc",
- "rand 0.8.8",
  "reqwest",
  "serde",
  "serde_json",
@@ -2926,16 +2924,10 @@ name = "xtxp-tui"
 version = "0.0.1"
 dependencies = [
  "clap",
- "futures-util",
- "libc",
- "rand 0.8.8",
  "ratatui",
- "serde_json",
  "tokio",
- "tokio-tungstenite 0.30.0",
  "xmesh",
  "xtxp-muppet",
- "xtxp-wire",
 ]
 
 [[package]]

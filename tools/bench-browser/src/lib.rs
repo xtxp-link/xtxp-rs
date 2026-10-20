@@ -1,4 +1,4 @@
-//! Load for `xtxp-muppet serve`: N lightweight viewers in one delivery mode,
+//! Load for `xtxp-serve`: N lightweight viewers in one delivery mode,
 //! and an editor on y-sweet changing the logo's cross at a fixed rate. Each
 //! edit carries a number (`data-bench`), so a viewer knows which edit a patch
 //! shows, and latency is measured on one clock, from the edit leaving the

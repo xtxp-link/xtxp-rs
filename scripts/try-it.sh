@@ -73,10 +73,10 @@ if [ ! -x .tools/bin/y-sweet ]; then
     cargo install --git https://github.com/jamsocket/y-sweet --rev "$YSWEET_REV" \
         y-sweet --root .tools --locked
 fi
-echo "Building xtxp-muppet and dependencies..."
-cargo build --release -p xtxp-muppet -p xtxp-serve
+echo "Building xtxp-muppet and xtxp-tui..."
+cargo build --release -p xtxp-muppet -p xtxp-tui
 if [ "$BROWSER" -eq 1 ]; then
-    cargo build --release -p xtxp-tui
+    cargo build --release -p xtxp-serve
 fi
 
 # 3. y-sweet on localhost:8080 (and, with --browser, check 3000 is free too).

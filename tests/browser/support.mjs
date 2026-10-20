@@ -1,4 +1,4 @@
-// Starts a real y-sweet, seeds the XTXP logo, and runs `xtxp-muppet serve`.
+// Starts a real y-sweet, seeds the XTXP logo, and runs `xtxp-serve`.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import net from 'node:net';
