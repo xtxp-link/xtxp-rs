@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/xmesh", "crates/xtxp-muppet", "crates/xtxp-wire", "tools/chaos-proxy", "tools/fuzzer", "tools/yrs-compat"]
+members = ["crates/xmesh", "crates/xtxp-muppet", "crates/xtxp-wire", "tools/chaos-proxy", "tools/fuzzer", "tools/yrs-compat", "tools/bench-browser"]
 
 [workspace.package]
 edition = "2021"

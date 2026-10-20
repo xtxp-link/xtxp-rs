@@ -1,0 +1,22 @@
+[package]
+name = "bench-browser"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Load tool for xtxp-muppet serve: N viewers in one delivery mode, an editor on y-sweet, latency and bandwidth."
+
+[dependencies]
+xmesh = { path = "../../crates/xmesh" }
+xtxp-wire = { path = "../../crates/xtxp-wire" }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros", "sync"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+reqwest = { version = "0.12", default-features = false, features = ["stream"] }
+clap = { version = "4", features = ["derive"] }
+rand.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+xtxp-muppet = { path = "../../crates/xtxp-muppet" }
+axum = "0.8"

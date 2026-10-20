@@ -20,8 +20,10 @@ starting with `README.md` there.
 | --- | --- |
 | `crates/xmesh` | The pure core: XML documents on Yrs XML types, canonical form, snapshots, node IDs, test vectors. |
 | `crates/xtxp-wire` | The peer side of the Yjs sync protocol as y-sweet speaks it, as a pure state machine (plus a fake host for tests). |
-| `crates/xtxp-muppet` | The muppet: a terminal UI and one-shot commands. A pure core behind ports, with tokio, WebSocket and ratatui adapters. |
+| `crates/xtxp-muppet` | The muppet: a terminal UI, one-shot commands, and `serve`, which shows a document to browsers. A pure core behind ports, with tokio, WebSocket and ratatui adapters. |
 | `tools/chaos-proxy` | A WebSocket proxy that delays and duplicates frames and drops connections, for the end-to-end tests. |
+| `tools/bench-browser` | Load for `serve`: viewers in each delivery mode and an editor on y-sweet, measuring latency and bandwidth. |
+| `tests/browser` | Playwright tests of `serve` in Chromium 158 (native `<template for>`) and 141 (without). |
 | `tools/fuzzer` | Generates test vectors from a numeric seed. |
 | `tools/yrs-compat` | Checks that Xmesh's Yrs 0.28 updates apply the same way in Yrs 0.19.2, which y-sweet runs, and keeps live repros of the findings. |
 | `vectors/`, `features/` | Hand-written vectors and the scenarios they check. |
@@ -83,14 +85,39 @@ The ops are `set-attr`, `remove-attr`, `insert`, `insert-text`, `remove` and
 `move`. Separate several with `,`; they apply as one batch. `--server` picks
 another y-sweet (default `localhost:8080`).
 
+## In a browser
+
+M2-y-sweet's first part shows a document live in a browser, watch-only for now:
+
+```sh
+scripts/try-it.sh --browser
+```
+
+It also seeds the XTXP logo as `logo` and runs `xtxp-muppet serve logo` on `localhost:3000`. Edit the logo with `target/release/xtxp-muppet open logo` and watch the browser. The same drawing comes in three ways:
+
+| URL | How changes arrive | JavaScript |
+| --- | --- | --- |
+| `/?live=refresh` | The page reloads every second; unchanged polls get `304 Not Modified`. | none |
+| `/?live=stream` | The page's response stays open and each change arrives as a `<template for>` patch ([declarative partial updates](https://xtxp.link/spec/browser/)). Needs Chrome or Edge 150 or later. | none |
+| `/?live=ws` | A WebSocket and a small polyfill (`live.js`) that applies the same patches in any modern browser. | `live.js` |
+
+`/` with no parameters picks one: the stream where the browser supports it, the WebSocket otherwise, and the refresh with JavaScript off. `&grain=node` or `&grain=region` chooses whether a patch replaces just the changed elements or the whole drawing.
+
+To measure, add `&metrics=1` (latency and view-transition time in an overlay, sent to the server) and read `http://localhost:3000/metrics`. `tools/bench-browser` puts load on it: N viewers in one mode and an editor on y-sweet, reporting latency, bandwidth and server CPU. `scripts/bench-browser.sh` runs every mode at 1 to 1,000 viewers. What the browsers did is in [`docs/reports/m2-y-sweet-browser-probes.md`](docs/reports/m2-y-sweet-browser-probes.md).
+
+`--reset` deletes the stored documents first (after asking), so they're seeded fresh.
+
 ## Tests
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --exclude xtxp-fuzzer
+cargo test --workspace --exclude xtxp-fuzzer --exclude bench-browser
 cargo test --release -p xtxp-fuzzer          # 500 fuzz seeds
 cargo test --release -p xtxp-muppet --test e2e
+cargo test --release -p bench-browser          # a smoke run of every mode
+scripts/fetch-chromium.sh                     # Chromium 158, once
+(cd tests/browser && npm ci && npx playwright test)
 ```
 
 The end-to-end tests start real y-sweet servers behind the chaos proxy and
