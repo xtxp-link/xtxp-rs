@@ -136,8 +136,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Connect to the muppet and drive it (blocking call in a blocking task).
+    // Use Mode::Interactive to keep the connection open and process commands continuously.
     let outcome = tokio::task::block_in_place(|| {
-        ws::run(Mode::Show, &args.server, &args.doc, app, Some(rx))
+        ws::run(Mode::Interactive, &args.server, &args.doc, app, Some(rx))
     });
 
     if outcome.ok {
