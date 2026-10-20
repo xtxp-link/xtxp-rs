@@ -4,13 +4,13 @@ pub mod keys;
 pub mod model;
 pub mod render;
 
-use xtxp_muppet::adapters::ws;
-use xtxp_muppet::core::Mode;
-use xtxp_muppet::ports::{Outcome, Screen, View};
 use model::Model;
 use ratatui::crossterm::event::{self, Event};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use xtxp_muppet::adapters::ws;
+use xtxp_muppet::core::Mode;
+use xtxp_muppet::ports::{Outcome, Screen, View};
 
 struct Ui {
     model: Model,

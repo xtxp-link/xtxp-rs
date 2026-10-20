@@ -130,10 +130,6 @@ impl Renderer {
         self.seq
     }
 
-    pub fn tree(&self) -> &[IdNode] {
-        &self.tree
-    }
-
     /// The current region's HTML, without a template, for rendering pages.
     pub fn region(&self) -> &str {
         &self.region

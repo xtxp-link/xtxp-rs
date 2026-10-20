@@ -299,21 +299,16 @@ fn stream(app: &App, grain: Grain, polyfill: bool, measure: bool) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use xtxp_muppet::ports::Screen;
     use xmesh::{Op, Xmesh};
+    use xtxp_muppet::ports::Screen;
 
     #[tokio::test]
     async fn lagging_viewer_gets_a_region_resync() {
         let hub = Hub::new("logo");
         let metrics = Metrics::new();
         let d = Xmesh::new(7).unwrap();
-        d.apply(
-            &Xmesh::seed(include_str!(
-                "../../../xmesh/tests/fixtures/xtxp-logo.svg"
-            ))
-            .unwrap(),
-        )
-        .unwrap();
+        d.apply(&Xmesh::seed(include_str!("../../../xmesh/tests/fixtures/xtxp-logo.svg")).unwrap())
+            .unwrap();
         let show = |d: &Xmesh| {
             hub.show(&Screen {
                 tree: d.tree_with_ids(),

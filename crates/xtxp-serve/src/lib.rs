@@ -1,10 +1,13 @@
 //! A muppet app: serves a y-sweet document to browsers in three delivery modes
 //! (refresh, stream, WebSocket). The app is the owner of the server-side views.
 
-mod serve;
 mod render;
+mod serve;
 
-pub use serve::{Hub, HubView, Snapshot, Metrics, MetricsSnapshot, Mode, ModeStats, router, router_with, Options, Params};
+pub use serve::{
+    router, router_with, Hub, HubView, Metrics, MetricsSnapshot, Mode, ModeStats, Options, Params,
+    Snapshot,
+};
 
 use std::net::SocketAddr;
 

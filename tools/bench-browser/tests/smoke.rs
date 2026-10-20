@@ -7,7 +7,6 @@ use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use xtxp_muppet::core::Mode as CoreMode;
 use xtxp_muppet::ports::{Outcome, Screen, View};
-use xtxp_serve;
 
 const LOGO: &str = include_str!("../../../crates/xmesh/tests/fixtures/xtxp-logo.svg");
 

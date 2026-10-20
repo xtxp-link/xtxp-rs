@@ -18,5 +18,6 @@ rand.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+xtxp-muppet = { path = "../../crates/xtxp-muppet", features = ["adapters"] }
 xtxp-serve = { path = "../../crates/xtxp-serve" }
 axum = "0.8"
