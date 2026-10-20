@@ -135,8 +135,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.server, args.doc
     );
 
-    // Connect to the muppet and drive it.
-    let outcome = ws::run(Mode::Show, &args.server, &args.doc, app, Some(rx));
+    // Connect to the muppet and drive it (blocking call in a blocking task).
+    let outcome = tokio::task::block_in_place(|| {
+        ws::run(Mode::Show, &args.server, &args.doc, app, Some(rx))
+    });
 
     if outcome.ok {
         eprintln!("orbit: done");
