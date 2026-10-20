@@ -1,8 +1,8 @@
 //! The TUI: ratatui on crossterm, for editing y-sweet documents interactively.
 
-pub mod keys;
-pub mod model;
-pub mod render;
+mod keys;
+mod model;
+mod render;
 
 use model::Model;
 use ratatui::crossterm::event::{self, Event};

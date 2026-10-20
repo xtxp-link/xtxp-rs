@@ -1,10 +1,11 @@
 use clap::Parser;
 use std::net::SocketAddr;
+use std::process::ExitCode;
 use xtxp_muppet::adapters::ysweet;
 
 /// Serve a y-sweet document to browsers in three delivery modes.
 #[derive(Debug, Parser)]
-#[command(name = "xtxp-serve", version)]
+#[command(name = "xtxp-serve", version, long_version = concat!(env!("CARGO_PKG_VERSION"), " (Rust implementation)"))]
 struct Args {
     /// Document name
     doc: String,
@@ -16,14 +17,15 @@ struct Args {
     listen: SocketAddr,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
-    if let Err(e) = ysweet::check_doc(&args.doc) {
-        eprintln!("xtxp-serve: {e}");
-        std::process::exit(1);
-    }
-    if let Err(e) = xtxp_serve::run(&args.server, &args.doc, args.listen) {
-        eprintln!("xtxp-serve: {e}");
-        std::process::exit(1);
+    let result = ysweet::check_doc(&args.doc)
+        .and_then(|()| xtxp_serve::run(&args.server, &args.doc, args.listen));
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("xtxp-serve: {e}");
+            ExitCode::FAILURE
+        }
     }
 }

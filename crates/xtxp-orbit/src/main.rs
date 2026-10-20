@@ -21,7 +21,7 @@ fn pair(s: &str) -> Result<Vec2, String> {
 /// and the right X at 64,0. By default the two outer X's start on a circular
 /// orbit about the cross, one moving up and one down.
 #[derive(Parser, Debug)]
-#[command(name = "xtxp-orbit", version)]
+#[command(name = "xtxp-orbit", version, long_version = concat!(env!("CARGO_PKG_VERSION"), " (Rust implementation)"))]
 struct Args {
     /// Document name (the XTXP logo)
     doc: String,

@@ -4,10 +4,8 @@
 mod render;
 mod serve;
 
-pub use serve::{
-    router, router_with, Hub, HubView, Metrics, MetricsSnapshot, Mode, ModeStats, Options, Params,
-    Snapshot,
-};
+use serve::HubView;
+pub use serve::{router, router_with, Hub, Metrics, Options};
 
 use std::net::SocketAddr;
 

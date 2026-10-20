@@ -63,7 +63,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cargo build --release -p xtxp-muppet -p xtxp-serve -p xtxp-tui
+      - run: cargo build --release -p xtxp-muppet -p xtxp-serve
       # bench-browser's smoke run: every mode, 10 viewers, against a real y-sweet.
       - run: cargo test --release -p bench-browser
       - working-directory: tests/browser

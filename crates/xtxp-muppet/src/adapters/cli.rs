@@ -1,5 +1,6 @@
 //! The one-shot commands (`init`, `edit`, `show`, `replay`) and the entry point.
 
+use crate::adapters::ysweet::check_doc;
 use crate::adapters::{ws, ysweet};
 use crate::core::Mode;
 use crate::ops_words::parse_op_words;
@@ -12,7 +13,7 @@ use xmesh::{IdNode, IdNodeKind, Op, Xmesh};
 
 /// A local XTXP muppet for a stock y-sweet (M1-y-sweet).
 #[derive(Debug, Parser)]
-#[command(name = "xtxp-muppet", version)]
+#[command(name = "xtxp-muppet", version, long_version = concat!(env!("CARGO_PKG_VERSION"), " (Rust implementation)"))]
 pub struct Cli {
     /// y-sweet's address.
     #[arg(long, global = true, default_value = "localhost:8080")]
@@ -166,17 +167,6 @@ fn finish(server: &str, outcome: &Outcome) -> Result<(), String> {
         ))
     } else {
         Err(message)
-    }
-}
-
-/// Refuses a name y-sweet wouldn't take, before trying to connect.
-fn check_doc(name: &str) -> Result<(), String> {
-    if ysweet::valid_doc_name(name) {
-        Ok(())
-    } else {
-        Err(format!(
-            "{name:?} isn't a valid document name (letters, digits, - and _)"
-        ))
     }
 }
 

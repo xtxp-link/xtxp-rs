@@ -9,6 +9,8 @@ to a stock, unmodified [y-sweet](https://github.com/jamsocket/y-sweet) v0.9.1
 over the Yjs sync protocol, to get a feel for a real host before deciding
 the full M1 and M2. M1 is command line only. Browsers come in M2.
 
+This repository is the Rust implementation: one muppet and the applications that drive it, each its own binary (`--version` says so). A muppet in another language would be a separate implementation of the same spec, with its own applications.
+
 The spec, the plans and the findings so far are on the
 [website](https://xtxp.link) and in
 [xtxp-link/website `docs/plans`](https://github.com/xtxp-link/website/tree/main/docs/plans),
