@@ -1,165 +1,135 @@
-//! Orbit: a physics engine app that drives a muppet.
+//! xtxp-orbit: animates the XTXP logo with a three-body physics engine.
 
 use clap::Parser;
+use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
 use tokio::sync::mpsc::unbounded_channel;
 use xtxp_muppet::adapters::{ws, ysweet};
 use xtxp_muppet::core::Mode;
-use xtxp_muppet::ports::{Outcome, Screen, View};
-use xtxp_orbit::{Engine, Orbit};
+use xtxp_orbit::{drive, Body, Engine, Finder, Vec2};
 
-/// Wrapper that allows Orbit to be shared across threads via Arc<Mutex<>>.
-struct SharedOrbit(Arc<Mutex<Orbit>>);
-
-impl View for SharedOrbit {
-    fn show(&mut self, screen: &Screen) {
-        self.0.lock().unwrap().show(screen);
-    }
-    fn status(&mut self, line: &str) {
-        self.0.lock().unwrap().status(line);
-    }
-    fn finished(&mut self, outcome: &Outcome) {
-        self.0.lock().unwrap().finished(outcome);
-    }
+fn pair(s: &str) -> Result<Vec2, String> {
+    let (x, y) = s.split_once(',').ok_or("expected X,Y")?;
+    let n = |v: &str| v.trim().parse::<f64>().map_err(|e| format!("{v:?}: {e}"));
+    Ok((n(x)?, n(y)?))
 }
 
-/// Orbital physics engine for XTXP documents.
+/// Drive the logo in a y-sweet document with a three-body physics engine.
+///
+/// Positions are in the logo's own units: the left X at 0,0, the cross at 32,0
+/// and the right X at 64,0. By default the two outer X's start on a circular
+/// orbit about the cross, one moving up and one down.
 #[derive(Parser, Debug)]
 #[command(name = "xtxp-orbit", version)]
-#[command(about = "Drive a y-sweet document with orbital physics", long_about = None)]
-pub struct Args {
-    /// Document name
-    pub doc: String,
+struct Args {
+    /// Document name (the XTXP logo)
+    doc: String,
 
     /// y-sweet's address
     #[arg(long, default_value = "localhost:8080")]
-    pub server: String,
+    server: String,
 
-    /// Physics loop frequency in Hz
+    /// Physics steps per second
     #[arg(long, default_value_t = 240.0)]
-    pub physics_hz: f64,
+    physics_hz: f64,
 
-    /// Render loop frequency in Hz
+    /// Transforms published per second
     #[arg(long, default_value_t = 30.0)]
-    pub render_hz: f64,
+    render_hz: f64,
 
-    /// Center X coordinate in pixels
-    #[arg(long, default_value_t = 256.0)]
-    pub center_x: f64,
+    /// Gravitational constant
+    #[arg(long, default_value_t = 800.0)]
+    gravity: f64,
 
-    /// Center Y coordinate in pixels
-    #[arg(long, default_value_t = 256.0)]
-    pub center_y: f64,
+    /// Distance below which gravity stops growing
+    #[arg(long, default_value_t = 4.0)]
+    softening: f64,
 
-    /// Left body initial X offset from center
-    #[arg(long, default_value_t = -100.0)]
-    pub left_offset_x: f64,
-
-    /// Left body initial Y offset from center
-    #[arg(long, default_value_t = 0.0)]
-    pub left_offset_y: f64,
-
-    /// Left body initial X velocity
-    #[arg(long, default_value_t = 0.0)]
-    pub left_vel_x: f64,
-
-    /// Left body initial Y velocity
+    /// Mass of the cross
     #[arg(long, default_value_t = 100.0)]
-    pub left_vel_y: f64,
+    cross_mass: f64,
 
-    /// Right body initial X offset from center (symmetric to left if not set)
-    #[arg(long)]
-    pub right_offset_x: Option<f64>,
+    /// Mass of each outer X
+    #[arg(long, default_value_t = 1.0)]
+    outer_mass: f64,
 
-    /// Right body initial Y offset from center (symmetric to left if not set)
-    #[arg(long)]
-    pub right_offset_y: Option<f64>,
+    /// Left X's start position, X,Y
+    #[arg(long, value_parser = pair, allow_hyphen_values = true, default_value = "0,0")]
+    left_pos: Vec2,
 
-    /// Right body initial X velocity (opposite of left if not set)
-    #[arg(long)]
-    pub right_vel_x: Option<f64>,
+    /// Cross's start position, X,Y
+    #[arg(long, value_parser = pair, allow_hyphen_values = true, default_value = "32,0")]
+    cross_pos: Vec2,
 
-    /// Right body initial Y velocity (opposite of left if not set)
-    #[arg(long)]
-    pub right_vel_y: Option<f64>,
+    /// Right X's start position, X,Y
+    #[arg(long, value_parser = pair, allow_hyphen_values = true, default_value = "64,0")]
+    right_pos: Vec2,
+
+    /// Left X's velocity, X,Y (default: circular, moving up)
+    #[arg(long, value_parser = pair, allow_hyphen_values = true)]
+    left_vel: Option<Vec2>,
+
+    /// Cross's velocity, X,Y
+    #[arg(long, value_parser = pair, allow_hyphen_values = true, default_value = "0,0")]
+    cross_vel: Vec2,
+
+    /// Right X's velocity, X,Y (default: circular, moving down)
+    #[arg(long, value_parser = pair, allow_hyphen_values = true)]
+    right_vel: Option<Vec2>,
+
+    /// Left X's spin about its own centre, degrees per second (clockwise)
+    #[arg(long, allow_hyphen_values = true, default_value_t = 180.0)]
+    left_spin: f64,
+
+    /// Cross's spin about its own centre, degrees per second (clockwise)
+    #[arg(long, allow_hyphen_values = true, default_value_t = 0.0)]
+    cross_spin: f64,
+
+    /// Right X's spin about its own centre, degrees per second (clockwise)
+    #[arg(long, allow_hyphen_values = true, default_value_t = 180.0)]
+    right_spin: f64,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ExitCode {
     let args = Args::parse();
-
-    // Validate document name.
-    if !ysweet::valid_doc_name(&args.doc) {
-        eprintln!(
-            "xtxp-orbit: {:?} isn't a valid document name (letters, digits, - and _)",
-            args.doc
-        );
-        return Err("invalid document name".into());
+    if let Err(e) = ysweet::check_doc(&args.doc) {
+        eprintln!("xtxp-orbit: {e}");
+        return ExitCode::FAILURE;
+    }
+    if args.physics_hz <= 0.0 || args.render_hz <= 0.0 {
+        eprintln!("xtxp-orbit: --physics-hz and --render-hz must be positive");
+        return ExitCode::FAILURE;
     }
 
-    // Default right body to be symmetric to left.
-    let right_offset_x = args.right_offset_x.unwrap_or(-args.left_offset_x);
-    let right_offset_y = args.right_offset_y.unwrap_or(-args.left_offset_y);
-    let right_vel_x = args.right_vel_x.unwrap_or(-args.left_vel_x);
-    let right_vel_y = args.right_vel_y.unwrap_or(-args.left_vel_y);
+    let bodies = vec![
+        Body::new(args.outer_mass, args.left_pos, (0.0, 0.0)).with_spin(args.left_spin),
+        Body::new(args.cross_mass, args.cross_pos, args.cross_vel).with_spin(args.cross_spin),
+        Body::new(args.outer_mass, args.right_pos, (0.0, 0.0)).with_spin(args.right_spin),
+    ];
+    let mut engine = Engine::new(bodies, args.gravity, args.softening, args.physics_hz);
+    let left_v = engine.circular_speed(0, args.cross_pos);
+    let right_v = engine.circular_speed(2, args.cross_pos);
+    engine.set_velocity(0, args.left_vel.unwrap_or((0.0, -left_v)));
+    engine.set_velocity(2, args.right_vel.unwrap_or((0.0, right_v)));
 
-    // Create the engine.
-    let engine = Engine::new(
-        (args.center_x, args.center_y),
-        (args.left_offset_x, args.left_offset_y),
-        (args.left_vel_x, args.left_vel_y),
-        (right_offset_x, right_offset_y),
-        (right_vel_x, right_vel_y),
+    let targets = Arc::new(Mutex::new(None));
+    let (tx, rx) = unbounded_channel();
+    let render_hz = args.render_hz;
+    let shared = Arc::clone(&targets);
+    thread::spawn(move || drive(engine, shared, tx, render_hz));
+
+    eprintln!("orbit: driving {} on {}", args.doc, args.server);
+    let outcome = ws::run(
+        Mode::Interactive,
+        &args.server,
+        &args.doc,
+        Finder(targets),
+        Some(rx),
     );
-
-    // Create the app in Arc<Mutex<>> to share between physics thread and muppet.
-    let app = Arc::new(Mutex::new(Orbit::new(&args.doc, engine, args.render_hz)));
-
-    // Channel for sending commands to the muppet.
-    let (_tx, rx) = unbounded_channel();
-
-    // Spawn the physics loop in a separate std thread that updates the shared app.
-    let app_clone = Arc::clone(&app);
-    let physics_hz = args.physics_hz;
-    let _physics_thread = thread::spawn(move || {
-        let physics_dt = Duration::from_secs_f64(1.0 / physics_hz);
-        let mut last_physics = Instant::now();
-        loop {
-            if last_physics.elapsed() >= physics_dt {
-                // Lock the app, step physics, and generate commands.
-                let commands = app_clone.lock().unwrap().update();
-                // Commands are sent through the channel to the muppet.
-                if !commands.is_empty() {
-                    eprintln!("orbit: {} commands", commands.len());
-                }
-                last_physics = Instant::now();
-            }
-            thread::sleep(Duration::from_millis(1));
-        }
-    });
-
-    eprintln!(
-        "orbit: connecting to {} for document {}",
-        args.server, args.doc
-    );
-
-    // Connect to the muppet and drive it (blocking call in a blocking task).
-    // Use Mode::Interactive to keep the connection open and process commands continuously.
-    // SharedOrbit wraps the Arc<Mutex<Orbit>> so it can be passed to ws::run.
-    let outcome = tokio::task::block_in_place(|| {
-        ws::run(Mode::Interactive, &args.server, &args.doc, SharedOrbit(app), Some(rx))
-    });
-
     if outcome.ok {
-        eprintln!("orbit: done");
+        ExitCode::SUCCESS
     } else {
-        eprintln!(
-            "orbit: {}",
-            outcome.message.unwrap_or_else(|| "failed".into())
-        );
+        ExitCode::FAILURE
     }
-
-    Ok(())
 }
