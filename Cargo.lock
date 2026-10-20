@@ -2905,7 +2905,6 @@ name = "xtxp-serve"
 version = "0.0.1"
 dependencies = [
  "axum",
- "chaos-proxy",
  "clap",
  "futures-util",
  "libc",
@@ -2916,7 +2915,6 @@ dependencies = [
  "tokio-tungstenite 0.30.0",
  "xmesh",
  "xtxp-muppet",
- "xtxp-wire",
 ]
 
 [[package]]
