@@ -2,13 +2,13 @@
 
 use super::model::{display_name, find, rows, EditTarget};
 use super::model::{InputMode, Model};
-use crate::ports::Screen;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 use xmesh::IdNodeKind;
+use xtxp_muppet::ports::Screen;
 
 const HINTS: &str = "↑↓ select  ←→ fold  Enter edit  a add  d delete  i insert  m move  q quit";
 

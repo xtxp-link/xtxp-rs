@@ -299,21 +299,16 @@ fn stream(app: &App, grain: Grain, polyfill: bool, measure: bool) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::Screen;
     use xmesh::{Op, Xmesh};
+    use xtxp_muppet::ports::Screen;
 
     #[tokio::test]
     async fn lagging_viewer_gets_a_region_resync() {
         let hub = Hub::new("logo");
         let metrics = Metrics::new();
         let d = Xmesh::new(7).unwrap();
-        d.apply(
-            &Xmesh::seed(include_str!(
-                "../../../../xmesh/tests/fixtures/xtxp-logo.svg"
-            ))
-            .unwrap(),
-        )
-        .unwrap();
+        d.apply(&Xmesh::seed(include_str!("../../../xmesh/tests/fixtures/xtxp-logo.svg")).unwrap())
+            .unwrap();
         let show = |d: &Xmesh| {
             hub.show(&Screen {
                 tree: d.tree_with_ids(),
@@ -350,7 +345,7 @@ mod tests {
     }
 }
 
-const LIVE_JS: &str = include_str!("../../../assets/live.js");
+const LIVE_JS: &str = include_str!("../../assets/live.js");
 
 fn grain_name(grain: Grain) -> &'static str {
     match grain {
@@ -443,7 +438,7 @@ async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebS
     }
 }
 
-const METRICS_JS: &str = include_str!("../../../assets/metrics.js");
+const METRICS_JS: &str = include_str!("../../assets/metrics.js");
 
 /// Picks a mode for a browser with JavaScript: the patch stream where
 /// `<template for>` works natively, the WebSocket polyfill otherwise.

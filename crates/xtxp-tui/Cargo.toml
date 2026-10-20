@@ -1,0 +1,18 @@
+[package]
+name = "xtxp-tui"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "A muppet app: interactive terminal UI editor for y-sweet documents."
+publish = false
+
+[[bin]]
+name = "xtxp-tui"
+path = "src/main.rs"
+
+[dependencies]
+xmesh = { path = "../xmesh" }
+xtxp-muppet = { path = "../xtxp-muppet", features = ["adapters"] }
+tokio = { version = "1", features = ["sync"] }
+clap = { version = "4", features = ["derive"] }
+ratatui = "0.30"

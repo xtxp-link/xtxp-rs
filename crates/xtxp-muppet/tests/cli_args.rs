@@ -10,23 +10,6 @@ fn parses_each_subcommand() {
     assert_eq!(c.server, "localhost:8080");
     let c = Cli::try_parse_from([
         "xtxp-muppet",
-        "--server",
-        "h:1",
-        "open",
-        "demo",
-        "--read-only",
-    ])
-    .unwrap();
-    assert!(matches!(
-        c.sub,
-        Sub::Open {
-            read_only: true,
-            ..
-        }
-    ));
-    assert_eq!(c.server, "h:1");
-    let c = Cli::try_parse_from([
-        "xtxp-muppet",
         "edit",
         "demo",
         "set-attr",
@@ -84,7 +67,6 @@ fn one_shot_without_server_fails_cleanly() {
 fn bad_doc_names_are_refused_at_once() {
     for args in [
         &["show", "my doc"][..],
-        &["open", "a/b"],
         &["edit", "a?b", "remove", "0"],
         &["replay", "v.json", "--peer", "p1", "--doc", "x y"],
     ] {

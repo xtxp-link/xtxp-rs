@@ -1,8 +1,6 @@
-//! The binary's adapters: the only code here that touches the network, the
-//! clock, randomness or the terminal.
+//! The muppet's adapters: implementations of the driving ports (Transport, Clock,
+//! IdSource, View) that touch the network and the clock.
 
 pub mod cli;
-pub mod serve;
-pub mod tui;
 pub mod ws;
 pub mod ysweet;

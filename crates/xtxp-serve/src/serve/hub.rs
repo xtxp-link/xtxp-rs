@@ -1,10 +1,10 @@
 //! One document's current page and its patch sets, fanned out to every viewer.
 
-use crate::ports::{Outcome, Screen, View};
 use crate::render::{state_html, template, PatchSet, Renderer};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
+use xtxp_muppet::ports::{Outcome, Screen, View};
 
 /// Patch sets a viewer may fall behind by before it gets a whole-document resync.
 pub const CAPACITY: usize = 64;

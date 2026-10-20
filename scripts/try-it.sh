@@ -73,8 +73,11 @@ if [ ! -x .tools/bin/y-sweet ]; then
     cargo install --git https://github.com/jamsocket/y-sweet --rev "$YSWEET_REV" \
         y-sweet --root .tools --locked
 fi
-echo "Building xtxp-muppet..."
-cargo build --release -p xtxp-muppet
+echo "Building xtxp-muppet and xtxp-tui..."
+cargo build --release -p xtxp-muppet -p xtxp-tui
+if [ "$BROWSER" -eq 1 ]; then
+    cargo build --release -p xtxp-serve
+fi
 
 # 3. y-sweet on localhost:8080 (and, with --browser, check 3000 is free too).
 port_free_or_exit "$PORT"
@@ -116,7 +119,7 @@ seed() {
 seed "$DOC" crates/xmesh/tests/fixtures/inkscape-blank.svg
 if [ "$BROWSER" -eq 1 ]; then
     seed "$LOGO" crates/xmesh/tests/fixtures/xtxp-logo.svg
-    target/release/xtxp-muppet --server "localhost:$PORT" serve "$LOGO" --listen "127.0.0.1:$WEB_PORT" &
+    target/release/xtxp-serve "$LOGO" --server "localhost:$PORT" --listen "127.0.0.1:$WEB_PORT" &
     SERVE_PID=$!
 fi
 
@@ -126,7 +129,7 @@ cat <<EOF
 y-sweet is running on localhost:$PORT. In two more terminals, run:
 
     cd $(pwd)
-    target/release/xtxp-muppet open $DOC
+    target/release/xtxp-tui $DOC
 
 Edit in one and watch the change arrive in the other.
 EOF
@@ -143,7 +146,7 @@ The XTXP logo is in your browser at:
 Add &metrics=1 to any of them to measure, and see http://localhost:$WEB_PORT/metrics.
 Edit it from a terminal with:
 
-    target/release/xtxp-muppet open $LOGO
+    target/release/xtxp-tui $LOGO
 
 (Try the cross: the third row's first child, stroke-width, with ← and →.)
 EOF

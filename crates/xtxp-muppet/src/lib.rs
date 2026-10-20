@@ -1,12 +1,35 @@
-//! A local muppet (decision 7): Xmesh is its engine, `xtxp-wire` carries its
-//! conversation with a host, and its application layer is a TUI or one-shot
-//! commands. Hexagonal: [`core::Muppet`] knows nothing about terminals,
-//! sockets or clocks; everything that touches the world plugs in through
-//! [`ports`], and the binary's adapters implement them.
+//! The XTXP muppet: the executor of the protocol (decision 7).
+//!
+//! A muppet is Xmesh (the CRDT engine), `xtxp-wire` (the sync state machine), and the admission
+//! and hosting logic for sessions. A muppet has no views and no user; it is the engine that
+//! applications drive.
+//!
+//! **Hexagonal architecture**: [`core::Muppet`] knows nothing about terminals, sockets, clocks or
+//! rendering; everything that touches the external world plugs in through [`ports`] traits
+//! ([`ports::Transport`], [`ports::Clock`], [`ports::IdSource`], [`ports::View`]).
+//!
+//! ## Driving the muppet: the application API
+//!
+//! Applications embed the muppet as a library and drive it through a simple boundary:
+//! - **In**: commands sent via a `tokio` `UnboundedReceiver<`[`core::Command`]`>` (operations the application
+//!   wants to make: edit, set text, set attributes).
+//! - **Out**: screens received via [`ports::View::show`] with a [`ports::Screen`] (the current state of the tree,
+//!   which nodes changed, and the session connection state).
+//! - **Entry point**: `adapters::ws::run(mode, server, doc, view, commands)`: one peer on
+//!   y-sweet that syncs the document and conveys commands and screens.
+//!
+//! The same boundary works for any application: a TUI editor, a browser server that renders HTML,
+//! a game or physics engine that owns a space, or anything else that needs to drive edits on a
+//! y-sweet document. Applications see the document as a tree; the muppet executes operations on
+//! it, syncs with the host, and tells the application what changed.
+//!
+//! ## One-shot commands
+//!
+//! For single operations (init, edit, show, replay) that don't need a live View, use the
+//! headless modes in [`adapters::ws::run`]; they return an [`ports::Outcome`] when done.
 
 #[cfg(feature = "adapters")]
 pub mod adapters;
 pub mod core;
 pub mod ops_words;
 pub mod ports;
-pub mod render;

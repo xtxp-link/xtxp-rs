@@ -20,6 +20,7 @@ pub struct TransitionNames {
 }
 
 impl TransitionNames {
+    #[cfg(test)]
     pub fn new() -> TransitionNames {
         TransitionNames::default()
     }

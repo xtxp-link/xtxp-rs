@@ -7,6 +7,4 @@ mod html;
 
 pub use dirty::{template, Grain, PatchSet, Renderer};
 
-pub use html::{
-    marker_name, render_node, render_page, render_region, state_html, PageInfo, TransitionNames,
-};
+pub use html::{render_page, state_html, PageInfo};

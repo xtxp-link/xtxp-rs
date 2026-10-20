@@ -2,12 +2,12 @@
 
 use super::model::{find, root, rows};
 use super::model::{EditTarget, InputMode, Model};
-use crate::core::Command;
-use crate::ports::Screen;
 use ratatui::crossterm::event::KeyEventKind;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;
 use xmesh::{IdNode, IdNodeKind, NodeId};
+use xtxp_muppet::core::Command;
+use xtxp_muppet::ports::Screen;
 
 const HIGHLIGHT_MS: u64 = 1_000;
 
@@ -406,9 +406,10 @@ pub fn nudge_step(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Command;
     use ratatui::crossterm::event::{KeyEventKind, KeyEventState, KeyModifiers};
     use xmesh::{IdNode, IdNodeKind, NodeId, Xmesh};
+    use xtxp_muppet::core::Command;
+    use xtxp_muppet::ports::Screen;
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent {

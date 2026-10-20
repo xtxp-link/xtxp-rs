@@ -1,5 +1,6 @@
 //! The one-shot commands (`init`, `edit`, `show`, `replay`) and the entry point.
 
+use crate::adapters::ysweet::check_doc;
 use crate::adapters::{ws, ysweet};
 use crate::core::Mode;
 use crate::ops_words::parse_op_words;
@@ -12,7 +13,7 @@ use xmesh::{IdNode, IdNodeKind, Op, Xmesh};
 
 /// A local XTXP muppet for a stock y-sweet (M1-y-sweet).
 #[derive(Debug, Parser)]
-#[command(name = "xtxp-muppet", version)]
+#[command(name = "xtxp-muppet", version, long_version = concat!(env!("CARGO_PKG_VERSION"), " (Rust implementation)"))]
 pub struct Cli {
     /// y-sweet's address.
     #[arg(long, global = true, default_value = "localhost:8080")]
@@ -30,24 +31,11 @@ pub enum Sub {
         #[arg(long)]
         doc: Option<String>,
     },
-    /// Edit interactively in a terminal UI.
-    Open {
-        doc: String,
-        /// Watch without editing (a viewer, not access control).
-        #[arg(long)]
-        read_only: bool,
-    },
     /// Apply one batch of ops and exit once y-sweet has it. Separate ops with `,`.
     Edit {
         doc: String,
         #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
         ops: Vec<String>,
-    },
-    /// Serve a document to browsers: refresh, stream or WebSocket (`?live=`).
-    Serve {
-        doc: String,
-        #[arg(long, default_value = "127.0.0.1:3000")]
-        listen: std::net::SocketAddr,
     },
     /// Sync, print and exit.
     Show {
@@ -182,17 +170,6 @@ fn finish(server: &str, outcome: &Outcome) -> Result<(), String> {
     }
 }
 
-/// Refuses a name y-sweet wouldn't take, before trying to connect.
-fn check_doc(name: &str) -> Result<(), String> {
-    if ysweet::valid_doc_name(name) {
-        Ok(())
-    } else {
-        Err(format!(
-            "{name:?} isn't a valid document name (letters, digits, - and _)"
-        ))
-    }
-}
-
 fn run(cli: Cli) -> Result<(), String> {
     let server = cli.server.clone();
     match cli.sub {
@@ -275,14 +252,6 @@ fn run(cli: Cli) -> Result<(), String> {
             );
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
-        }
-        Sub::Serve { doc, listen } => {
-            check_doc(&doc)?;
-            crate::adapters::serve::run(&server, &doc, listen)?
-        }
-        Sub::Open { doc, read_only } => {
-            check_doc(&doc)?;
-            crate::adapters::tui::run(&server, &doc, read_only)?
         }
     }
     Ok(())

@@ -17,6 +17,18 @@ pub fn valid_doc_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Validates a document name; returns an error message if it's invalid.
+/// Used by all app adapters to give consistent error messages to the user.
+pub fn check_doc(name: &str) -> Result<(), String> {
+    if valid_doc_name(name) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{name:?} isn't a valid document name (letters, digits, - and _)"
+        ))
+    }
+}
+
 /// `POST /doc/new {"docId": name}`: creates the document, or finds it.
 pub fn create_doc(server: &str, name: &str) -> Result<(), String> {
     let body = format!("{{\"docId\":\"{name}\"}}");
