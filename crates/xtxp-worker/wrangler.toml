@@ -3,7 +3,8 @@ main = "build/index.js"
 compatibility_date = "2026-10-01"
 
 [build]
-command = "cargo install -q worker-build@^0.8 && worker-build --release"
+# worker-build goes into target/, so the build doesn't depend on PATH.
+command = "cargo install -q worker-build@^0.8 --root target/worker-build && target/worker-build/bin/worker-build --release"
 
 [[durable_objects.bindings]]
 name = "ROOM"
