@@ -2,7 +2,7 @@
 
 use super::model::{display_name, find, rows, EditTarget};
 use super::model::{InputMode, Model};
-use crate::ports::Screen;
+use xtxp_muppet::ports::Screen;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;

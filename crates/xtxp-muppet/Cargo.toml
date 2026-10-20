@@ -8,7 +8,7 @@ description = "The XTXP muppet: the executor of the protocol."
 [features]
 default = ["adapters"]
 # The muppet's adapters: implementations of ports that touch the network and clock.
-adapters = ["dep:ratatui", "dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json", "dep:libc", "dep:serde"]
+adapters = ["dep:tokio", "dep:tokio-tungstenite", "dep:futures-util", "dep:clap", "dep:rand", "dep:serde_json", "dep:serde"]
 
 [[bin]]
 name = "xtxp-muppet"
@@ -32,8 +32,6 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 clap = { version = "4", features = ["derive"], optional = true }
 rand = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-ratatui = { version = "0.30", optional = true }
-libc = { version = "0.2", optional = true }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

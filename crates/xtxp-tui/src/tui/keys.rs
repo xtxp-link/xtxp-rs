@@ -2,8 +2,8 @@
 
 use super::model::{find, root, rows};
 use super::model::{EditTarget, InputMode, Model};
-use crate::core::Command;
-use crate::ports::Screen;
+use xtxp_muppet::core::Command;
+use xtxp_muppet::ports::Screen;
 use ratatui::crossterm::event::KeyEventKind;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::BTreeMap;

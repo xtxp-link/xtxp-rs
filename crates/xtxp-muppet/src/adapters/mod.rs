@@ -2,6 +2,5 @@
 //! IdSource, View) that touch the network and the clock.
 
 pub mod cli;
-pub mod tui;
 pub mod ws;
 pub mod ysweet;

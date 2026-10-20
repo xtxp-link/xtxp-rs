@@ -30,13 +30,6 @@ pub enum Sub {
         #[arg(long)]
         doc: Option<String>,
     },
-    /// Edit interactively in a terminal UI.
-    Open {
-        doc: String,
-        /// Watch without editing (a viewer, not access control).
-        #[arg(long)]
-        read_only: bool,
-    },
     /// Apply one batch of ops and exit once y-sweet has it. Separate ops with `,`.
     Edit {
         doc: String,
@@ -269,10 +262,6 @@ fn run(cli: Cli) -> Result<(), String> {
             );
             finish(&server, &outcome)?;
             println!("{}", hashes_json(&outcome));
-        }
-        Sub::Open { doc, read_only } => {
-            check_doc(&doc)?;
-            crate::adapters::tui::run(&server, &doc, read_only)?
         }
     }
     Ok(())

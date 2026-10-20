@@ -1,0 +1,27 @@
+[package]
+name = "xtxp-tui"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+description = "A muppet app: interactive terminal UI editor for y-sweet documents."
+publish = false
+
+[[bin]]
+name = "xtxp-tui"
+path = "src/main.rs"
+
+[dependencies]
+xmesh = { path = "../xmesh" }
+xtxp-muppet = { path = "../xtxp-muppet", features = ["adapters"] }
+xtxp-wire = { path = "../xtxp-wire" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "sync", "io-util", "signal"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+clap = { version = "4", features = ["derive"] }
+rand.workspace = true
+serde_json.workspace = true
+ratatui = "0.30"
+libc = "0.2"
+
+[dev-dependencies]
+xtxp-wire = { path = "../xtxp-wire", features = ["fake-host"] }
