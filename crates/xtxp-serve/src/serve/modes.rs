@@ -3,7 +3,9 @@
 use super::hub::Snapshot;
 use super::metrics::ConnGuard;
 use super::{Hub, Metrics, Mode};
-use crate::render::{render_page, Grain, PageInfo, PatchSet};
+use crate::render::{
+    metrics_tag, render_page, script_tag, Grain, PageInfo, PatchSet, LIVE_JS, METRICS_JS, PICKER,
+};
 use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
@@ -345,24 +347,6 @@ mod tests {
     }
 }
 
-const LIVE_JS: &str = include_str!("../../assets/live.js");
-
-fn grain_name(grain: Grain) -> &'static str {
-    match grain {
-        Grain::Node => "node",
-        Grain::Region => "region",
-    }
-}
-
-/// The polyfill's tag. Not `defer`: in stream mode the document never
-/// finishes parsing, so a deferred script would never run.
-fn script_tag(mode: &str, grain: Grain) -> String {
-    format!(
-        "<script src=\"/live.js\" data-mode=\"{mode}\" data-grain=\"{}\"></script>",
-        grain_name(grain)
-    )
-}
-
 async fn live_js() -> Response {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
@@ -435,32 +419,6 @@ async fn live_socket(app: App, grain: Grain, mut socket: axum::extract::ws::WebS
                 Some(Ok(_)) => {}
             },
         }
-    }
-}
-
-const METRICS_JS: &str = include_str!("../../assets/metrics.js");
-
-/// Picks a mode for a browser with JavaScript: the patch stream where
-/// `<template for>` works natively, the WebSocket polyfill otherwise.
-const PICKER: &str = r#"<script>(function () {
-  var ok = false;
-  try {
-    var d = Document.parseHTMLUnsafe('<div id="t"><?start name="t"><?end><template for="t">x</template></div>');
-    ok = d.getElementById('t').textContent === 'x';
-  } catch (e) {}
-  var keep = new URLSearchParams(location.search).get('metrics') === '1' ? '&metrics=1' : '';
-  if (ok) { location.replace('?live=stream' + keep); return; }
-  var s = document.createElement('script');
-  s.src = '/live.js'; s.dataset.mode = 'ws'; s.dataset.grain = 'node';
-  document.body.appendChild(s);
-})();</script>"#;
-
-/// The measurement script's tag, before any other script so it sees every patch.
-fn metrics_tag(on: bool) -> String {
-    if on {
-        "<script src=\"/metrics.js\"></script>".to_string()
-    } else {
-        String::new()
     }
 }
 

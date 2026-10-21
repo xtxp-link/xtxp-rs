@@ -3,7 +3,7 @@ name = "xtxp-wire"
 version = "0.0.1"
 edition.workspace = true
 license.workspace = true
-description = "The peer side of XTXP's conversation with a host: the Yjs sync protocol, as a pure state machine."
+description = "XTXP's conversation with a host: the peer side of the Yjs sync protocol, and y-sweet's host side, as pure state machines."
 
 [features]
 # An in-process stand-in for y-sweet v0.9.1, for tests here and in xtxp-muppet.

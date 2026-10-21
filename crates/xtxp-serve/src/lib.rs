@@ -1,15 +1,23 @@
 //! A muppet app: serves a y-sweet document to browsers in three delivery modes
 //! (refresh, stream, WebSocket). The app is the owner of the server-side views.
+//!
+//! [`render`] is pure and builds for wasm (`default-features = false`);
+//! the `server` feature adds the HTTP server and the muppet that feeds it.
 
-mod render;
+pub mod render;
+#[cfg(feature = "server")]
 mod serve;
 
+#[cfg(feature = "server")]
 use serve::HubView;
+#[cfg(feature = "server")]
 pub use serve::{router, router_with, Hub, Metrics, Options};
 
+#[cfg(feature = "server")]
 use std::net::SocketAddr;
 
 /// Watches `doc` on y-sweet at `server` and serves it on `listen` until Ctrl-C.
+#[cfg(feature = "server")]
 pub fn run(server: &str, doc: &str, listen: SocketAddr) -> Result<(), String> {
     let (hub, metrics) = start(server, doc);
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -33,6 +41,7 @@ pub fn run(server: &str, doc: &str, listen: SocketAddr) -> Result<(), String> {
 /// Starts watching `doc` on y-sweet at `server`: the watch-only core on its
 /// own thread and runtime, feeding a new hub. It never finishes on its own;
 /// it ends with the process.
+#[cfg(feature = "server")]
 pub fn start(server: &str, doc: &str) -> (Hub, Metrics) {
     let hub = Hub::new(doc);
     let (server, doc, view) = (server.to_string(), doc.to_string(), HubView(hub.clone()));

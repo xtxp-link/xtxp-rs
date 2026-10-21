@@ -1,30 +1,18 @@
 //! One document's current page and its patch sets, fanned out to every viewer.
 
-use crate::render::{state_html, template, PatchSet, Renderer};
+use crate::render::{Page, PatchSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use xtxp_muppet::ports::{Outcome, Screen, View};
 
+pub use crate::render::Snapshot;
+
 /// Patch sets a viewer may fall behind by before it gets a whole-document resync.
 pub const CAPACITY: usize = 64;
 
-const EMPTY_REGION: &str = "<?start name=\"doc\"><?end>";
-
-/// What a viewer starts from.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Snapshot {
-    pub region_html: String,
-    pub snapshot: String,
-    pub connected: bool,
-    pub seq: u64,
-    pub sent_ms: u64,
-}
-
 struct State {
-    renderer: Renderer,
-    connected: bool,
-    sent_ms: u64,
+    page: Page,
     render_us: Vec<u64>,
 }
 
@@ -37,7 +25,7 @@ struct Inner {
     tx: broadcast::Sender<Arc<PatchSet>>,
 }
 
-/// One document's renderer and its broadcast channel. Cheap to clone.
+/// One document's page and its broadcast channel. Cheap to clone.
 #[derive(Clone)]
 pub struct Hub(Arc<Inner>);
 
@@ -55,9 +43,7 @@ impl Hub {
         Hub(Arc::new(Inner {
             doc: doc.to_string(),
             state: Mutex::new(State {
-                renderer: Renderer::new(),
-                connected: false,
-                sent_ms: 0,
+                page: Page::new(),
                 render_us: Vec::new(),
             }),
             tx,
@@ -71,44 +57,19 @@ impl Hub {
     /// Renders a new screen and publishes its patch set, if anything changed.
     pub fn show(&self, screen: &Screen) {
         let mut state = self.0.state.lock().expect("hub lock");
-        let state_changed = state.connected != screen.connected;
-        state.connected = screen.connected;
-        let now = unix_ms();
         let started = std::time::Instant::now();
-        let patch = state
-            .renderer
-            .update(&screen.tree, &screen.snapshot_hash, now);
-        if patch.is_some() {
+        let patch = state.page.show(
+            &screen.tree,
+            &screen.snapshot_hash,
+            screen.connected,
+            unix_ms(),
+        );
+        if let Some(patch) = patch {
             let us = started.elapsed().as_micros() as u64;
             if state.render_us.len() == RENDER_SAMPLES {
                 state.render_us.remove(0);
             }
             state.render_us.push(us);
-        }
-        // A change of connection state patches the header's state marker,
-        // with the content's patch set or on its own.
-        let patch = match (patch, state_changed) {
-            (Some(mut p), true) => {
-                let st = template("state", p.seq, now, &state_html(screen.connected));
-                p.node_html.push_str(&st);
-                p.region_html.push_str(&st);
-                Some(p)
-            }
-            (None, true) => {
-                let seq = state.renderer.next_seq();
-                let st = template("state", seq, now, &state_html(screen.connected));
-                Some(PatchSet {
-                    seq,
-                    sent_ms: now,
-                    snapshot: screen.snapshot_hash.clone(),
-                    node_html: st.clone(),
-                    region_html: st,
-                })
-            }
-            (p, false) => p,
-        };
-        if let Some(patch) = patch {
-            state.sent_ms = now;
             // No receivers is fine: nobody is watching yet.
             let _ = self.0.tx.send(Arc::new(patch));
         }
@@ -117,14 +78,14 @@ impl Hub {
     /// The current page state, without subscribing.
     pub fn current(&self) -> Snapshot {
         let state = self.0.state.lock().expect("hub lock");
-        snapshot_of(&state)
+        state.page.snapshot()
     }
 
     /// Subscribes, then copies the current state under the same lock, so the
     /// viewer misses no patch set newer than what it starts from.
     pub fn subscribe(&self) -> (broadcast::Receiver<Arc<PatchSet>>, Snapshot) {
         let state = self.0.state.lock().expect("hub lock");
-        (self.0.tx.subscribe(), snapshot_of(&state))
+        (self.0.tx.subscribe(), state.page.snapshot())
     }
 
     /// How long each change took to render, in microseconds (both grains).
@@ -135,23 +96,7 @@ impl Hub {
     /// The whole document as one region patch.
     pub fn full(&self) -> Arc<PatchSet> {
         let state = self.0.state.lock().expect("hub lock");
-        Arc::new(state.renderer.full(unix_ms()))
-    }
-}
-
-fn snapshot_of(state: &State) -> Snapshot {
-    let full = state.renderer.full(state.sent_ms);
-    let region = state.renderer.region();
-    Snapshot {
-        region_html: if region.is_empty() {
-            EMPTY_REGION.to_string()
-        } else {
-            region.to_string()
-        },
-        snapshot: full.snapshot,
-        connected: state.connected,
-        seq: full.seq,
-        sent_ms: state.sent_ms,
+        Arc::new(state.page.full(unix_ms()))
     }
 }
 

@@ -6,20 +6,26 @@ license.workspace = true
 description = "A muppet app: serves a y-sweet document to browsers in three delivery modes."
 publish = false
 
+[features]
+default = ["server"]
+# The HTTP server and the muppet that feeds it. Without it, only the pure renderer.
+server = ["dep:xtxp-muppet", "dep:tokio", "dep:futures-util", "dep:axum", "dep:serde", "dep:serde_json", "dep:clap", "dep:libc"]
+
 [[bin]]
 name = "xtxp-serve"
 path = "src/main.rs"
+required-features = ["server"]
 
 [dependencies]
 xmesh = { path = "../xmesh" }
-xtxp-muppet = { path = "../xtxp-muppet", features = ["adapters"] }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros", "sync", "signal"] }
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-axum = { version = "0.8", features = ["ws"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
-clap = { version = "4", features = ["derive"] }
-libc = "0.2"
+xtxp-muppet = { path = "../xtxp-muppet", features = ["adapters"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros", "sync", "signal"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"], optional = true }
+axum = { version = "0.8", features = ["ws"], optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tokio-tungstenite = "0.30"

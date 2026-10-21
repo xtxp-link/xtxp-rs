@@ -1,8 +1,9 @@
-//! An in-process stand-in for y-sweet v0.9.1's message handling
-//! (`y-sweet-core/src/doc_connection.rs`): on connect it sends its state
-//! vector and an awareness message; it answers sync step 1 with step 2,
-//! applies step 2 and updates and relays them to every other connection,
-//! echoes custom message 102, and ignores awareness.
+//! The host side of y-sweet v0.9.1's message handling
+//! (`y-sweet-core/src/doc_connection.rs`), as a pure state machine: on
+//! connect it sends its state vector and an awareness message; it answers
+//! sync step 1 with step 2, applies step 2 and updates and relays them to
+//! every other connection, echoes custom message 102, and ignores awareness.
+//! The tests' in-process y-sweet, and the Worker's host.
 
 use crate::{decode, encode, SYNC_STATUS};
 use std::collections::BTreeMap;
@@ -13,28 +14,57 @@ use yrs::StateVector;
 
 pub type ConnId = u32;
 
-/// Client ID the fake host's own document uses; it never edits.
+/// Client ID the host's own document uses; it never edits.
 const HOST_CLIENT: u64 = u32::MAX as u64 - 7;
 
-pub struct FakeHost {
+/// An update with no structs and no deletions, in v1 encoding.
+const EMPTY_UPDATE: [u8; 2] = [0, 0];
+
+pub struct Host {
     doc: Xmesh,
     conns: BTreeMap<ConnId, ()>,
     next: ConnId,
+    changed: bool,
 }
 
-impl Default for FakeHost {
+impl Default for Host {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl FakeHost {
-    pub fn new() -> FakeHost {
-        FakeHost {
+impl Host {
+    pub fn new() -> Host {
+        Host {
             doc: Xmesh::new(HOST_CLIENT).expect("valid host client ID"),
             conns: BTreeMap::new(),
             next: 1,
+            changed: false,
         }
+    }
+
+    /// A host whose document starts from `state`, as [`Host::state`] gave it.
+    pub fn load(state: &[u8]) -> Result<Host, String> {
+        let host = Host::new();
+        host.doc.apply(state).map_err(|e| e.to_string())?;
+        Ok(host)
+    }
+
+    /// The whole document as one update.
+    pub fn state(&self) -> Vec<u8> {
+        use yrs::updates::encoder::Encode;
+        self.doc
+            .diff(&StateVector::default().encode_v1())
+            .expect("empty state vector")
+    }
+
+    pub fn doc(&self) -> &Xmesh {
+        &self.doc
+    }
+
+    /// Whether a peer sent anything but an empty update since the last call.
+    pub fn take_changed(&mut self) -> bool {
+        std::mem::take(&mut self.changed)
     }
 
     /// A new connection, and the frames y-sweet sends on connect.
@@ -72,6 +102,8 @@ impl FakeHost {
                 if self.doc.apply(&update).is_err() {
                     return vec![];
                 }
+                // A peer's step 2 is empty when it has nothing new.
+                self.changed |= update != EMPTY_UPDATE;
                 let relay = encode(&Message::Sync(SyncMessage::Update(update)));
                 self.conns
                     .keys()

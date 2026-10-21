@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/xmesh", "crates/xtxp-muppet", "crates/xtxp-serve", "crates/xtxp-tui", "crates/xtxp-orbit", "crates/xtxp-wire", "tools/chaos-proxy", "tools/fuzzer", "tools/yrs-compat", "tools/bench-browser"]
+# Built for wasm32 with worker-build; its own workspace.
+exclude = ["crates/xtxp-worker"]
 
 [workspace.package]
 edition = "2021"
