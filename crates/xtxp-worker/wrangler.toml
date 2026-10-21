@@ -1,4 +1,4 @@
-name = "xtxp"
+name = "xtxp-worker"
 main = "build/index.js"
 compatibility_date = "2026-10-01"
 
