@@ -144,11 +144,11 @@ To put it on the Workers free plan, from `crates/xtxp-worker`:
 
 ```sh
 npx wrangler login
-npx wrangler deploy        # prints https://xtxp-rs.<your-subdomain>.workers.dev
+npx wrangler deploy        # prints https://xtxp-worker.<your-subdomain>.workers.dev
 ```
 
-then point the muppets at it with `--server https://xtxp-rs.<your-subdomain>.workers.dev`
-and open `https://xtxp-rs.<your-subdomain>.workers.dev/d/logo/` in browsers.
+then point the muppets at it with `--server https://xtxp-worker.<your-subdomain>.workers.dev`
+and open `https://xtxp-worker.<your-subdomain>.workers.dev/d/logo/` in browsers.
 
 What the free plan means for it:
 
