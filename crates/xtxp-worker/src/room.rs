@@ -213,7 +213,10 @@ impl Room {
             None,
         )?;
         let mut saved = Vec::new();
-        for row in sql.exec("SELECT bytes FROM chunks ORDER BY seq", None)?.raw() {
+        for row in sql
+            .exec("SELECT bytes FROM chunks ORDER BY seq", None)?
+            .raw()
+        {
             if let Some(SqlStorageValue::Blob(bytes)) = row?.into_iter().next() {
                 saved.extend_from_slice(&bytes);
             }
