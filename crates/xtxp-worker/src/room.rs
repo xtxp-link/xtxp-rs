@@ -24,6 +24,9 @@ use xtxp_wire::host::{ConnId, Host};
 /// How long a change may wait in memory before it's saved.
 const SAVE_MS: u64 = 2_000;
 
+/// The most a stored chunk of the document holds; SQLite's limit is 2 MB.
+const CHUNK: usize = 1 << 20;
+
 /// How often an open stream gets a heartbeat comment.
 const HEARTBEAT: Duration = Duration::from_secs(15);
 
@@ -206,37 +209,68 @@ impl Room {
         }
         let sql = self.state.storage().sql();
         sql.exec(
-            "CREATE TABLE IF NOT EXISTS doc (id INTEGER PRIMARY KEY CHECK (id = 0), state BLOB NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS chunks (seq INTEGER PRIMARY KEY, bytes BLOB NOT NULL)",
             None,
         )?;
-        let mut saved = None;
-        for row in sql.exec("SELECT state FROM doc WHERE id = 0", None)?.raw() {
+        let mut saved = Vec::new();
+        for row in sql
+            .exec("SELECT bytes FROM chunks ORDER BY seq", None)?
+            .raw()
+        {
             if let Some(SqlStorageValue::Blob(bytes)) = row?.into_iter().next() {
-                saved = Some(bytes);
+                saved.extend_from_slice(&bytes);
             }
         }
-        let host = match saved {
-            Some(bytes) => Host::load(&bytes).map_err(worker::Error::RustError)?,
-            None => Host::new(),
+        // Before chunks, the state was one row of a `doc` table.
+        if saved.is_empty() {
+            let old = sql.exec(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'doc'",
+                None,
+            )?;
+            if old.raw().next().is_some() {
+                for row in sql.exec("SELECT state FROM doc WHERE id = 0", None)?.raw() {
+                    if let Some(SqlStorageValue::Blob(bytes)) = row?.into_iter().next() {
+                        saved = bytes;
+                    }
+                }
+            }
+        }
+        let host = if saved.is_empty() {
+            Host::new()
+        } else {
+            Host::load(&saved).map_err(worker::Error::RustError)?
         };
         *self.doc.borrow_mut() = Some(Doc::new(host));
         Ok(())
     }
 
-    /// Writes the document if it changed since the last write.
+    /// Writes the document if it changed since the last write, in chunks
+    /// under SQLite's 2 MB limit on a value. The writes have no `await`
+    /// between them, so storage commits them together. If they fail, the
+    /// document stays unsaved and the alarm is retried.
     fn save(&self) -> Result<()> {
         let state = {
-            let mut doc = self.doc.borrow_mut();
-            let Some(doc) = doc.as_mut().filter(|d| d.unsaved) else {
+            let doc = self.doc.borrow();
+            let Some(doc) = doc.as_ref().filter(|d| d.unsaved) else {
                 return Ok(());
             };
-            doc.unsaved = false;
             doc.host.state()
         };
-        self.state.storage().sql().exec(
-            "INSERT OR REPLACE INTO doc (id, state) VALUES (0, ?)",
-            vec![SqlStorageValue::Blob(state)],
-        )?;
+        let sql = self.state.storage().sql();
+        sql.exec("DELETE FROM chunks", None)?;
+        for (seq, chunk) in state.chunks(CHUNK).enumerate() {
+            sql.exec(
+                "INSERT INTO chunks (seq, bytes) VALUES (?, ?)",
+                vec![
+                    SqlStorageValue::Integer(seq as i64),
+                    SqlStorageValue::Blob(chunk.to_vec()),
+                ],
+            )?;
+        }
+        sql.exec("DROP TABLE IF EXISTS doc", None)?;
+        if let Some(doc) = self.doc.borrow_mut().as_mut() {
+            doc.unsaved = false;
+        }
         Ok(())
     }
 
