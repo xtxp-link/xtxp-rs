@@ -42,7 +42,8 @@ jobs:
       - run: cargo test -p xtxp-muppet --test e2e --release
 
   browser:
-    runs-on: ubuntu-latest
+    # Playwright has no Chromium for ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     env:
       CI: true
     steps:
