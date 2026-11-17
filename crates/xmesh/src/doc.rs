@@ -20,6 +20,11 @@ pub struct Xmesh {
     /// (found by fuzz seed 0), so Xmesh keeps them and re-applies them, which
     /// is idempotent, until nothing is missing.
     retry: std::cell::RefCell<Vec<Vec<u8>>>,
+    /// A copy that [`Xmesh::edit`] tries each batch on first. It gets every
+    /// update the document does, so an edit costs what it changes rather than
+    /// the whole history. `None` until the first edit, and after a batch
+    /// fails part way.
+    pub(crate) scratch: std::cell::RefCell<Option<Doc>>,
 }
 
 impl Xmesh {
@@ -37,6 +42,7 @@ impl Xmesh {
         Ok(Xmesh {
             doc: new_doc(client_id),
             retry: Default::default(),
+            scratch: Default::default(),
         })
     }
 
@@ -93,11 +99,21 @@ impl Xmesh {
         // blocks twice, and Yrs 0.28 integrating the repeat over a skip frees
         // a live block. Merging the update on its own drops the repeats.
         let update = yrs::merge_updates_v1([update]).map_err(|e| Error::Update(e.to_string()))?;
-        let update = Update::decode_v1(&update).map_err(|e| Error::Update(e.to_string()))?;
+        let decoded = Update::decode_v1(&update).map_err(|e| Error::Update(e.to_string()))?;
         self.doc
             .transact_mut()
-            .apply_update(update)
-            .map_err(|e| Error::Update(e.to_string()))
+            .apply_update(decoded)
+            .map_err(|e| Error::Update(e.to_string()))?;
+        let mut scratch = self.scratch.borrow_mut();
+        if let Some(copy) = scratch.as_ref() {
+            let applied = Update::decode_v1(&update)
+                .ok()
+                .and_then(|u| copy.transact_mut().apply_update(u).ok());
+            if applied.is_none() {
+                *scratch = None;
+            }
+        }
+        Ok(())
     }
 
     /// This replica's state vector, v1-encoded.

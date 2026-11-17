@@ -58,33 +58,46 @@ impl Xmesh {
     /// Applies `ops` as one transaction and returns the update it produced.
     /// If any operation fails, the document is left unchanged.
     pub fn edit(&self, ops: &[Op]) -> Result<Vec<u8>, Error> {
-        // Yrs can't roll a transaction back, so the batch is tried on a
-        // throwaway copy first and only replayed here if every op succeeds.
-        let scratch = new_doc(self.client_id());
-        let full = self
-            .doc
-            .transact()
-            .encode_state_as_update_v1(&StateVector::default());
-        let update = Update::decode_v1(&full).map_err(|e| Error::Update(e.to_string()))?;
-        scratch
+        // Yrs can't roll a transaction back, so the batch is tried on a copy
+        // first, and only its update is applied here if every op succeeds.
+        let mut scratch = self.scratch.borrow_mut();
+        if scratch.is_none() {
+            let copy = new_doc(self.client_id());
+            let full = self
+                .doc
+                .transact()
+                .encode_state_as_update_v1(&StateVector::default());
+            let update = Update::decode_v1(&full).map_err(|e| Error::Update(e.to_string()))?;
+            copy.transact_mut()
+                .apply_update(update)
+                .map_err(|e| Error::Update(e.to_string()))?;
+            *scratch = Some(copy);
+        }
+        let update = match run(scratch.as_ref().expect("just made"), ops) {
+            Ok(update) => update,
+            Err(e) => {
+                // Part of the batch may have landed on the copy; start afresh.
+                *scratch = None;
+                return Err(e);
+            }
+        };
+        let decoded = Update::decode_v1(&update).map_err(|e| Error::Update(e.to_string()))?;
+        self.doc
             .transact_mut()
-            .apply_update(update)
+            .apply_update(decoded)
             .map_err(|e| Error::Update(e.to_string()))?;
-        run(&scratch, ops)?;
-
-        let before = self.doc.transact().state_vector();
-        run(&self.doc, ops)?;
-        Ok(self.doc.transact().encode_diff_v1(&before))
+        Ok(update)
     }
 }
 
-fn run(doc: &Doc, ops: &[Op]) -> Result<(), Error> {
+/// Applies `ops` to `doc` in one transaction; the update it made.
+fn run(doc: &Doc, ops: &[Op]) -> Result<Vec<u8>, Error> {
     let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
     let mut txn = doc.transact_mut();
     for op in ops {
         apply_op(&mut txn, &fragment, op)?;
     }
-    Ok(())
+    Ok(txn.encode_update_v1())
 }
 
 /// A node that can hold children.
@@ -313,6 +326,45 @@ mod tests {
         let doc = Xmesh::new(1).unwrap();
         doc.apply(&Xmesh::seed(SVG).unwrap()).unwrap();
         doc
+    }
+
+    fn fill(path: Vec<u32>, value: &str) -> Op {
+        Op::SetAttr {
+            path,
+            name: "fill".into(),
+            value: value.into(),
+        }
+    }
+
+    #[test]
+    fn the_copy_keeps_up_with_remote_updates_and_failed_batches() {
+        let a = doc();
+        let b = Xmesh::new(2).unwrap();
+        b.apply(&Xmesh::seed(SVG).unwrap()).unwrap();
+        a.edit(&[fill(vec![0], "red")]).unwrap();
+        // A node only b has made, then edited by a: the copy has to catch up.
+        let insert = b
+            .edit(&[Op::Insert {
+                parent: vec![],
+                index: 3,
+                xml: format!("<ellipse{NS}/>"),
+            }])
+            .unwrap();
+        a.apply(&insert).unwrap();
+        a.edit(&[fill(vec![3], "blue")]).unwrap();
+        // A batch that fails part way leaves a, and its next edit, unharmed.
+        let before = a.canonical();
+        assert!(a
+            .edit(&[fill(vec![1], "green"), fill(vec![9], "x")])
+            .is_err());
+        assert_eq!(a.canonical(), before);
+        let update = a.edit(&[fill(vec![2], "gold")]).unwrap();
+        b.apply(&update).unwrap();
+        b.apply(&a.diff(&b.state_vector()).unwrap()).unwrap();
+        assert_eq!(a.hash(), b.hash());
+        let c = a.canonical();
+        assert!(c.contains(r#"fill="blue""#) && c.contains(r#"fill="gold""#));
+        assert!(!c.contains(r#"fill="green""#), "{c}");
     }
 
     fn body(doc: &Xmesh) -> String {
